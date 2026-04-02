@@ -53,7 +53,6 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = "ClaudeTTY"
-        window.setFrameAutosaveName("ClaudeTTYMainWindow")
         window.minSize = NSSize(width: 600, height: 400)
 
         super.init(window: window)
@@ -61,6 +60,13 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
 
         setupSplitView()
         showStartupScreen()
+
+        // Restore saved frame after all subviews are set up, so the split
+        // view layout doesn't override the restored geometry.
+        window.setFrameAutosaveName("ClaudeTTYMainWindow")
+        if !window.setFrameUsingName("ClaudeTTYMainWindow") {
+            window.center()
+        }
     }
 
     @available(*, unavailable)
