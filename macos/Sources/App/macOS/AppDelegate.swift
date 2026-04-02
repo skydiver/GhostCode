@@ -88,6 +88,9 @@ class AppDelegate: NSObject,
     /// This is only true before application has become active.
     private var applicationHasBecomeActive: Bool = false
 
+    /// The main ClaudeTTY window controller.
+    private(set) var claudeTTYController: ClaudeTTYController?
+
     /// This is set in applicationDidFinishLaunching with the system uptime so we can determine the
     /// seconds since the process was launched.
     private var applicationLaunchTime: TimeInterval = 0
@@ -355,13 +358,12 @@ class AppDelegate: NSObject,
         if !applicationHasBecomeActive {
             applicationHasBecomeActive = true
 
-            // Let's launch our first window. We only do this if we have no other windows. It
-            // is possible to have other windows in a few scenarios:
-            //   - if we're opening a URL since `application(_:openFile:)` is called before this.
-            //   - if we're restoring from persisted state
-            if TerminalController.all.isEmpty && derivedConfig.initialWindow {
+            // Launch the main ClaudeTTY window on first activation.
+            if claudeTTYController == nil && derivedConfig.initialWindow {
                 undoManager.disableUndoRegistration()
-                _ = TerminalController.newWindow(ghostty)
+                let controller = ClaudeTTYController(ghostty)
+                controller.showWindow(self)
+                self.claudeTTYController = controller
                 undoManager.enableUndoRegistration()
             }
         }
@@ -443,19 +445,22 @@ class AppDelegate: NSObject,
         // of focusing one of them.
         guard !flag else { return true }
 
-        // If we have any windows in our terminal manager we don't do anything.
-        // This is possible with flag set to false if there a race where the
-        // window is still initializing and is not visible but the user clicked
-        // the dock icon.
-        guard TerminalController.all.isEmpty else { return true }
+        // If we have our ClaudeTTY window, just show it
+        if let controller = claudeTTYController {
+            controller.showWindow(self)
+            controller.window?.makeKeyAndOrderFront(nil)
+            return false
+        }
 
         // If the application isn't active yet then we don't want to process
         // this because we're not ready. This happens sometimes in Xcode runs
         // but I haven't seen it happen in releases. I'm unsure why.
         guard applicationHasBecomeActive else { return true }
 
-        // No visible windows, open a new one.
-        _ = TerminalController.newWindow(ghostty)
+        // Create the ClaudeTTY window if it doesn't exist
+        let controller = ClaudeTTYController(ghostty)
+        controller.showWindow(self)
+        self.claudeTTYController = controller
         return false
     }
 
@@ -721,12 +726,21 @@ class AppDelegate: NSObject,
     }
 
     @objc private func ghosttyNewWindow(_ notification: Notification) {
+        // In ClaudeTTY mode, show the existing window instead of creating new ones
+        if let controller = claudeTTYController {
+            controller.showWindow(self)
+            return
+        }
+
         let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
         let config = configAny as? Ghostty.SurfaceConfiguration
         _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
     }
 
     @objc private func ghosttyNewTab(_ notification: Notification) {
+        // In ClaudeTTY mode, tabs are managed via the project sidebar
+        if claudeTTYController != nil { return }
+
         guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
         guard let window = surfaceView.window else { return }
 
@@ -957,10 +971,17 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
+        // In ClaudeTTY mode, show the existing window instead of creating new ones
+        if let controller = claudeTTYController {
+            controller.showWindow(self)
+            return
+        }
         _ = TerminalController.newWindow(ghostty)
     }
 
     @IBAction func newTab(_ sender: Any?) {
+        // In ClaudeTTY mode, tabs are managed via the project sidebar
+        if claudeTTYController != nil { return }
         _ = TerminalController.newTab(
             ghostty,
             from: TerminalController.preferredParent?.window
