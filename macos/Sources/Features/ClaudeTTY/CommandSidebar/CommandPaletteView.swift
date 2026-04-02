@@ -35,7 +35,13 @@ struct ClaudeTTYCommandPaletteView: View {
             }
             .buttonStyle(.plain)
         }
-        .frame(minWidth: 160)
+        .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(width: 1)
+        }
         .opacity(state.isLocked ? 0.4 : 1.0)
         .allowsHitTesting(!state.isLocked)
     }

@@ -14,7 +14,7 @@ struct ProjectListView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: 2) {
                     ForEach(store.projects) { project in
                         ProjectRow(project: project)
                             .onTapGesture {
@@ -58,7 +58,13 @@ struct ProjectListView: View {
             }
             .buttonStyle(.plain)
         }
-        .frame(minWidth: 180)
+        .frame(minWidth: 180, maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(width: 1)
+        }
         .onReceive(gitRefreshTimer) { _ in
             refreshAllGitStatus()
         }
@@ -102,33 +108,37 @@ struct ProjectRow: View {
     let project: Project
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Circle()
                 .fill(dotColor)
                 .frame(width: 8, height: 8)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(project.name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
 
                 if let git = project.gitStatus {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 6) {
                         Text(git.branch)
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
 
                         Text(git.displayText)
-                            .font(.system(size: 12))
+                            .font(.system(size: 11))
                             .foregroundColor(statusColor(git))
                     }
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(project.state == .activeVisible
             ? Color.accentColor.opacity(0.12)
             : Color.clear)

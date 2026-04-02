@@ -91,7 +91,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
             )
         )
         leftView.sizingOptions = []
-        leftSidebarItem = NSSplitViewItem(sidebarWithViewController: leftView)
+        leftSidebarItem = NSSplitViewItem(viewController: leftView)
         leftSidebarItem.minimumThickness = 180
         leftSidebarItem.maximumThickness = 300
         leftSidebarItem.canCollapse = true
@@ -177,7 +177,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     private func spawnTerminal(for project: Project) {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
-        config.command = ClaudeTTYConfig.resolveCommand("claude")
+        config.command = "/usr/bin/nano" // TODO: restore to ClaudeTTYConfig.resolveCommand("claude")
 
         let controller = TerminalController(ghostty, withBaseConfig: config)
 
