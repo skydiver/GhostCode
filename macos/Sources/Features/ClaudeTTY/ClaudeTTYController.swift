@@ -215,8 +215,8 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     private func spawnTerminal(for project: Project, resume: Bool = false) {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
-        // TODO: restore to ClaudeTTYConfig.resolveCommand("claude") / "claude --continue"
-        config.command = resume ? "/usr/bin/nano" : "/usr/bin/nano"
+        let claudePath = ClaudeTTYConfig.resolveCommand("claude")
+        config.command = resume ? "\(claudePath) --continue" : claudePath
 
         let controller = TerminalController(ghostty, withBaseConfig: config)
 
