@@ -3,6 +3,11 @@ import SwiftUI
 import GhosttyKit
 import Combine
 
+/// Shared state between ClaudeTTYController and CommandPaletteView.
+final class CommandPaletteState: ObservableObject {
+    @Published var isLocked: Bool = true
+}
+
 /// The main ClaudeTTY window controller. Manages a three-panel layout:
 /// left sidebar (projects), center (terminal or startup), right sidebar (commands).
 final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
@@ -18,6 +23,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     // Stores
     let projectStore = ProjectStore()
     let commandStore = CommandStore()
+    let commandPaletteState = CommandPaletteState()
 
     // The currently visible terminal controller, if any
     private(set) var activeTerminalController: TerminalController?
@@ -84,7 +90,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         let rightView = NSHostingController(
             rootView: CommandPaletteView(
                 store: commandStore,
-                isLocked: !hasActiveTerminal,
+                state: commandPaletteState,
                 onSendCommand: { [weak self] text in
                     self?.sendTextToActiveTerminal(text)
                 }
@@ -217,6 +223,6 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     // MARK: - Right Sidebar Lock
 
     private func updateRightSidebarLock() {
-        // Will be implemented in Task 12 with reactive state
+        commandPaletteState.isLocked = !hasActiveTerminal
     }
 }

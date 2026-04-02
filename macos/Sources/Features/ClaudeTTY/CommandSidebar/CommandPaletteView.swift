@@ -3,7 +3,7 @@ import SwiftUI
 /// The right sidebar view showing configurable command buttons.
 struct CommandPaletteView: View {
     @ObservedObject var store: CommandStore
-    let isLocked: Bool
+    @ObservedObject var state: CommandPaletteState
     let onSendCommand: (String) -> Void
 
     var body: some View {
@@ -13,7 +13,6 @@ struct CommandPaletteView: View {
                     ForEach(store.sections) { section in
                         CommandSectionView(
                             section: section,
-                            isLocked: isLocked,
                             onSendCommand: onSendCommand
                         )
                     }
@@ -37,15 +36,14 @@ struct CommandPaletteView: View {
             .buttonStyle(.plain)
         }
         .frame(minWidth: 160)
-        .opacity(isLocked ? 0.4 : 1.0)
-        .allowsHitTesting(!isLocked)
+        .opacity(state.isLocked ? 0.4 : 1.0)
+        .allowsHitTesting(!state.isLocked)
     }
 }
 
 /// A single section of command buttons.
 struct CommandSectionView: View {
     let section: CommandSection
-    let isLocked: Bool
     let onSendCommand: (String) -> Void
 
     var body: some View {
