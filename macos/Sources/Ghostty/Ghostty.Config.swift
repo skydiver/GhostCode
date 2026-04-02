@@ -70,6 +70,13 @@ extension Ghostty {
                 ghostty_config_load_default_files(cfg)
             }
 
+            // Layer ClaudeTTY config overrides on top of Ghostty defaults.
+            // This allows ClaudeTTY to override any Ghostty setting.
+            let claudeTTYConfigPath = ClaudeTTYConfig.configFilePath
+            if FileManager.default.fileExists(atPath: claudeTTYConfigPath) {
+                ghostty_config_load_file(cfg, claudeTTYConfigPath)
+            }
+
             // We only load CLI args when not running in Xcode because in Xcode we
             // pass some special parameters to control the debugger.
             if !isRunningInXcode() {

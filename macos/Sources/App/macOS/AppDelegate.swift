@@ -207,6 +207,9 @@ class AppDelegate: NSObject,
             "ApplePressAndHoldEnabled": false,
         ])
 
+        // Ensure ClaudeTTY config directory exists
+        ClaudeTTYConfig.ensureConfigDirectory()
+
         // Store our start time
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
