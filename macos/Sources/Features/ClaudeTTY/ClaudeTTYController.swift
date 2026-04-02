@@ -171,7 +171,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         centerContainer.subviews.forEach { $0.removeFromSuperview() }
 
         let landingView = ProjectLandingView(
-            projectName: project.name,
+            project: project,
             onStartSession: { [weak self] in
                 self?.spawnTerminal(for: project)
             },
