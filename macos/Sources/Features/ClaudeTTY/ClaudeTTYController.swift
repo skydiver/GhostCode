@@ -40,6 +40,9 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     // Combine cancellables for terminal exit observation
     private var exitCancellables: [String: AnyCancellable] = [:]
 
+    // Keyboard event monitor for sidebar toggles
+    private var eventMonitor: Any?
+
     init(_ ghostty: Ghostty.App) {
         self.ghostty = ghostty
 
@@ -106,6 +109,22 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         splitViewController.addSplitViewItem(rightSidebarItem)
 
         window?.contentViewController = splitViewController
+
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.modifierFlags.contains([.command, .shift]) else {
+                return event
+            }
+            switch event.charactersIgnoringModifiers {
+            case "l", "L":
+                self.toggleLeftSidebar(nil)
+                return nil
+            case "r", "R":
+                self.toggleRightSidebar(nil)
+                return nil
+            default:
+                return event
+            }
+        }
     }
 
     var hasActiveTerminal: Bool {
@@ -220,9 +239,39 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    // MARK: - Sidebar Toggles
+
+    /// Toggle the left sidebar visibility.
+    @IBAction func toggleLeftSidebar(_ sender: Any?) {
+        leftSidebarItem.animator().isCollapsed.toggle()
+    }
+
+    /// Toggle the right sidebar visibility.
+    @IBAction func toggleRightSidebar(_ sender: Any?) {
+        rightSidebarItem.animator().isCollapsed.toggle()
+    }
+
     // MARK: - Right Sidebar Lock
 
     private func updateRightSidebarLock() {
         commandPaletteState.isLocked = !hasActiveTerminal
+    }
+
+    // MARK: - Window Delegate
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        refreshAllGitStatus()
+    }
+
+    private func refreshAllGitStatus() {
+        for project in projectStore.projects {
+            Task {
+                if let status = await GitStatusProvider.fetchStatus(for: project.path) {
+                    await MainActor.run {
+                        projectStore.updateGitStatus(path: project.path, status: status)
+                    }
+                }
+            }
+        }
     }
 }
