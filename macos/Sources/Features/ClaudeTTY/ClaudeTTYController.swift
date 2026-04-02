@@ -195,30 +195,38 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     }
 
     private func switchToTerminal(_ controller: TerminalController, project: Project) {
-        centerContainer.subviews.forEach { $0.removeFromSuperview() }
         startupHostingView = nil
-
-        // Create a TerminalView using the controller as both view model and delegate.
-        // TerminalController conforms to TerminalViewModel and TerminalViewDelegate
-        // (inherited from BaseTerminalController).
-        let terminalView = TerminalView(
-            ghostty: ghostty,
-            viewModel: controller,
-            delegate: controller
-        )
-        let hostingView = NSHostingView(rootView: terminalView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        centerContainer.addSubview(hostingView)
-        NSLayoutConstraint.activate([
-            hostingView.topAnchor.constraint(equalTo: centerContainer.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: centerContainer.bottomAnchor),
-            hostingView.leadingAnchor.constraint(equalTo: centerContainer.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
-        ])
-
         activeTerminalController = controller
         projectStore.setVisible(project.path)
         updateRightSidebarLock()
+
+        // Build the new terminal view before removing the old one to avoid a
+        // visible flash. We defer the swap to the next run loop so the center
+        // container has valid bounds from the previous layout pass.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+
+            let terminalView = TerminalView(
+                ghostty: self.ghostty,
+                viewModel: controller,
+                delegate: controller
+            )
+            let hostingView = NSHostingView(rootView: terminalView)
+            hostingView.translatesAutoresizingMaskIntoConstraints = false
+            hostingView.frame = self.centerContainer.bounds
+            self.centerContainer.addSubview(hostingView)
+            NSLayoutConstraint.activate([
+                hostingView.topAnchor.constraint(equalTo: self.centerContainer.topAnchor),
+                hostingView.bottomAnchor.constraint(equalTo: self.centerContainer.bottomAnchor),
+                hostingView.leadingAnchor.constraint(equalTo: self.centerContainer.leadingAnchor),
+                hostingView.trailingAnchor.constraint(equalTo: self.centerContainer.trailingAnchor),
+            ])
+
+            // Remove all previous subviews now that the new one is in place.
+            for subview in self.centerContainer.subviews where subview !== hostingView {
+                subview.removeFromSuperview()
+            }
+        }
     }
 
     private func observeTerminalExit(_ controller: TerminalController, projectPath: String) {

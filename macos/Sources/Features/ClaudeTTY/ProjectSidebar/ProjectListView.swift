@@ -17,6 +17,7 @@ struct ProjectListView: View {
                 LazyVStack(spacing: 2) {
                     ForEach(store.projects) { project in
                         ProjectRow(project: project)
+                            .contentShape(Rectangle())
                             .onTapGesture {
                                 onSelectProject(project)
                             }
