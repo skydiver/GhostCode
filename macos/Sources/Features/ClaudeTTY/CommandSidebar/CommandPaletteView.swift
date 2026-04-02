@@ -52,21 +52,56 @@ struct CommandSectionView: View {
     let section: CommandSection
     let onSendCommand: (String) -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(section.name.uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .kerning(0.5)
+    @State private var isCollapsed = false
 
-            FlowLayout(spacing: 6) {
-                ForEach(section.items) { item in
-                    CommandButton(item: item) {
-                        onSendCommand(item.text)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isCollapsed.toggle()
+                }
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                        .frame(width: 12)
+
+                    Text(section.name.uppercased())
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .kerning(0.5)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if !isCollapsed {
+                FlowLayout(spacing: 6) {
+                    ForEach(section.items) { item in
+                        CommandButton(item: item) {
+                            onSendCommand(item.text)
+                        }
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
+                .transition(.opacity)
             }
         }
+        .background(Color.primary.opacity(0.04))
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .clipped()
     }
 }
 
@@ -74,6 +109,8 @@ struct CommandSectionView: View {
 struct CommandButton: View {
     let item: CommandItem
     let action: () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -93,14 +130,18 @@ struct CommandButton: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.06))
+            .background(Color.primary.opacity(isHovered ? 0.06 : 0))
             .cornerRadius(6)
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    .stroke(Color.primary.opacity(isHovered ? 0.25 : 0.1), lineWidth: 1)
             )
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
