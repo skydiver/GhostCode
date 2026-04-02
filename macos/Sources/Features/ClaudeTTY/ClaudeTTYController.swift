@@ -161,6 +161,36 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         ])
         startupHostingView = hostingView
         activeTerminalController = nil
+        projectStore.setSelected(nil)
+        updateRightSidebarLock()
+    }
+
+    // MARK: - Project Landing
+
+    private func showProjectLanding(for project: Project) {
+        centerContainer.subviews.forEach { $0.removeFromSuperview() }
+
+        let landingView = ProjectLandingView(
+            projectName: project.name,
+            onStartSession: { [weak self] in
+                self?.spawnTerminal(for: project)
+            },
+            onResumeSession: { [weak self] in
+                self?.spawnTerminal(for: project, resume: true)
+            }
+        )
+        let hostingView = NSHostingView(rootView: landingView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        centerContainer.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: centerContainer.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: centerContainer.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: centerContainer.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
+        ])
+        startupHostingView = hostingView
+        activeTerminalController = nil
+        projectStore.setSelected(project.path)
         updateRightSidebarLock()
     }
 
@@ -168,23 +198,25 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
 
     func activateProject(_ project: Project) {
         if let existingController = terminalControllers[project.path] {
-            // If the process has exited, clean up and spawn a fresh terminal
+            // If the process has exited, clean up and show landing page
             if existingController.surfaceTree.isEmpty || isProcessExited(existingController) {
                 terminalControllers.removeValue(forKey: project.path)
                 exitCancellables.removeValue(forKey: project.path)
-                spawnTerminal(for: project)
+                projectStore.setActive(project.path, active: false)
+                showProjectLanding(for: project)
                 return
             }
             switchToTerminal(existingController, project: project)
             return
         }
-        spawnTerminal(for: project)
+        showProjectLanding(for: project)
     }
 
-    private func spawnTerminal(for project: Project) {
+    private func spawnTerminal(for project: Project, resume: Bool = false) {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
-        config.command = "/usr/bin/nano" // TODO: restore to ClaudeTTYConfig.resolveCommand("claude")
+        // TODO: restore to ClaudeTTYConfig.resolveCommand("claude") / "claude --continue"
+        config.command = resume ? "/usr/bin/nano" : "/usr/bin/nano"
 
         let controller = TerminalController(ghostty, withBaseConfig: config)
 

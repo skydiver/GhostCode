@@ -4,9 +4,9 @@ import Combine
 /// Manages the list of ClaudeTTY projects. Persists to JSON.
 final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
+    @Published private(set) var selectedPath: String?
 
     private let filePath: String
-    private var visiblePath: String?
     private var activationHistory: [String] = []
 
     init(filePath: String? = nil) {
@@ -32,6 +32,7 @@ final class ProjectStore: ObservableObject {
         projects[index].state = active ? .activeBackground : .inactive
     }
 
+    /// Mark a project as the currently visible terminal. Updates running state.
     func setVisible(_ path: String) {
         if let prevIndex = projects.firstIndex(where: { $0.state == .activeVisible }) {
             projects[prevIndex].state = .activeBackground
@@ -41,7 +42,16 @@ final class ProjectStore: ObservableObject {
         }
         activationHistory.removeAll { $0 == path }
         activationHistory.append(path)
-        visiblePath = path
+        selectedPath = path
+    }
+
+    /// Select a project in the sidebar without changing its running state.
+    /// Demotes any currently visible terminal to background.
+    func setSelected(_ path: String?) {
+        if let prevIndex = projects.firstIndex(where: { $0.state == .activeVisible }) {
+            projects[prevIndex].state = .activeBackground
+        }
+        selectedPath = path
     }
 
     func updateGitStatus(path: String, status: Project.GitStatus) {

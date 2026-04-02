@@ -16,7 +16,7 @@ struct ProjectListView: View {
             ScrollView {
                 LazyVStack(spacing: 2) {
                     ForEach(store.projects) { project in
-                        ProjectRow(project: project)
+                        ProjectRow(project: project, isSelected: store.selectedPath == project.path)
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 onSelectProject(project)
@@ -107,6 +107,7 @@ struct ProjectListView: View {
 /// A single row in the project list.
 struct ProjectRow: View {
     let project: Project
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -143,11 +144,11 @@ struct ProjectRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(project.state == .activeVisible
+        .background(isSelected
             ? Color.accentColor.opacity(0.12)
             : Color.clear)
         .overlay(alignment: .leading) {
-            if project.state == .activeVisible {
+            if isSelected {
                 Rectangle()
                     .fill(Color.accentColor)
                     .frame(width: 3)
