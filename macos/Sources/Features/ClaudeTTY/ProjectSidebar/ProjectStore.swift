@@ -7,6 +7,7 @@ final class ProjectStore: ObservableObject {
 
     private let filePath: String
     private var visiblePath: String?
+    private var activationHistory: [String] = []
 
     init(filePath: String? = nil) {
         self.filePath = filePath ?? ClaudeTTYConfig.projectsFilePath
@@ -38,6 +39,8 @@ final class ProjectStore: ObservableObject {
         if let index = projects.firstIndex(where: { $0.path == path }) {
             projects[index].state = .activeVisible
         }
+        activationHistory.removeAll { $0 == path }
+        activationHistory.append(path)
         visiblePath = path
     }
 
@@ -50,8 +53,18 @@ final class ProjectStore: ObservableObject {
         projects.first { $0.path == path }
     }
 
-    var previousActiveProjectPath: String? {
-        projects.first { $0.state == .activeBackground }?.path
+    /// Returns the most recently active project that still has a running terminal.
+    func previousActiveProjectPath(excluding path: String) -> String? {
+        for candidatePath in activationHistory.reversed() where candidatePath != path {
+            if projects.first(where: { $0.path == candidatePath && $0.state != .inactive }) != nil {
+                return candidatePath
+            }
+        }
+        return nil
+    }
+
+    func removeFromHistory(_ path: String) {
+        activationHistory.removeAll { $0 == path }
     }
 
     // MARK: - Persistence

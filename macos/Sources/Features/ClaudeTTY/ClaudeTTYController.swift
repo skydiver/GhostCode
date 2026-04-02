@@ -37,7 +37,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     // The startup view, shown when no terminal is active
     private var startupHostingView: NSView?
 
-    // Combine cancellables for terminal exit observation
+    // Combine cancellables for terminal exit polling
     private var exitCancellables: [String: AnyCancellable] = [:]
 
     // Keyboard event monitor for sidebar toggles
@@ -168,6 +168,13 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
 
     func activateProject(_ project: Project) {
         if let existingController = terminalControllers[project.path] {
+            // If the process has exited, clean up and spawn a fresh terminal
+            if existingController.surfaceTree.isEmpty || isProcessExited(existingController) {
+                terminalControllers.removeValue(forKey: project.path)
+                exitCancellables.removeValue(forKey: project.path)
+                spawnTerminal(for: project)
+                return
+            }
             switchToTerminal(existingController, project: project)
             return
         }
@@ -230,11 +237,11 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     }
 
     private func observeTerminalExit(_ controller: TerminalController, projectPath: String) {
-        let cancellable = controller.$surfaceTree
-            .dropFirst()
-            .filter(\.isEmpty)
-            .first()
-            .receive(on: DispatchQueue.main)
+        let cancellable = Timer.publish(every: 0.3, on: .main, in: .common)
+            .autoconnect()
+            .first(where: { [weak self] _ in
+                self?.isProcessExited(controller) ?? true
+            })
             .sink { [weak self] _ in
                 self?.handleTerminalExit(projectPath: projectPath)
             }
@@ -242,17 +249,23 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     }
 
     private func handleTerminalExit(projectPath: String) {
+        guard terminalControllers.removeValue(forKey: projectPath) != nil else { return }
         exitCancellables.removeValue(forKey: projectPath)
-        terminalControllers.removeValue(forKey: projectPath)
         projectStore.setActive(projectPath, active: false)
+        projectStore.removeFromHistory(projectPath)
 
-        if let nextPath = terminalControllers.keys.first,
-           let nextController = terminalControllers[nextPath],
-           let project = projectStore.project(forPath: nextPath) {
-            switchToTerminal(nextController, project: project)
+        if let previousPath = projectStore.previousActiveProjectPath(excluding: projectPath),
+           let controller = terminalControllers[previousPath],
+           let project = projectStore.project(forPath: previousPath) {
+            switchToTerminal(controller, project: project)
         } else {
             showStartupScreen()
         }
+    }
+
+    private func isProcessExited(_ controller: TerminalController) -> Bool {
+        guard case .leaf(let view) = controller.surfaceTree.root else { return true }
+        return view.processExited
     }
 
     // MARK: - Command Execution

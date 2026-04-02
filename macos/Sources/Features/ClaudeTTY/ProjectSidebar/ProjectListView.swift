@@ -110,8 +110,7 @@ struct ProjectRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Circle()
-                .fill(dotColor)
+            stateIndicator
                 .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -156,11 +155,16 @@ struct ProjectRow: View {
         }
     }
 
-    private var dotColor: Color {
+    @ViewBuilder
+    private var stateIndicator: some View {
         switch project.state {
-        case .activeVisible: return .green
-        case .activeBackground: return .secondary
-        case .inactive: return .secondary.opacity(0.5)
+        case .activeVisible:
+            Circle().fill(.green)
+        case .activeBackground:
+            Circle()
+                .stroke(.green, lineWidth: 1.5)
+        case .inactive:
+            Circle().fill(Color.secondary.opacity(0.5))
         }
     }
 
