@@ -133,6 +133,10 @@ struct ProjectRow: View {
                             .font(.system(size: 11))
                             .foregroundColor(statusColor(git))
                     }
+                } else {
+                    Text("no repo")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary.opacity(0.6))
                 }
             }
 

@@ -115,17 +115,20 @@ struct FlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let result = layout(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
+        for (index, (position, width)) in zip(result.positions, result.widths).enumerated() {
             subviews[index].place(
                 at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
-                proposal: .unspecified
+                proposal: ProposedViewSize(width: width, height: nil)
             )
         }
     }
 
-    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+    private func layout(proposal: ProposedViewSize, subviews: Subviews)
+        -> (size: CGSize, positions: [CGPoint], widths: [CGFloat])
+    {
         let maxWidth = proposal.width ?? .infinity
         var positions: [CGPoint] = []
+        var widths: [CGFloat] = []
         var currentX: CGFloat = 0
         var currentY: CGFloat = 0
         var lineHeight: CGFloat = 0
@@ -133,19 +136,27 @@ struct FlowLayout: Layout {
 
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
+            let clampedWidth = min(size.width, maxWidth)
 
-            if currentX + size.width > maxWidth && currentX > 0 {
+            if currentX + clampedWidth > maxWidth && currentX > 0 {
                 currentX = 0
                 currentY += lineHeight + spacing
                 lineHeight = 0
             }
 
+            let availableWidth = maxWidth - currentX
+            let finalWidth = min(size.width, availableWidth)
+
             positions.append(CGPoint(x: currentX, y: currentY))
-            currentX += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
+            widths.append(finalWidth)
+            currentX += finalWidth + spacing
+            let placedHeight = subview.sizeThatFits(
+                ProposedViewSize(width: finalWidth, height: nil)
+            ).height
+            lineHeight = max(lineHeight, placedHeight)
             totalHeight = currentY + lineHeight
         }
 
-        return (CGSize(width: maxWidth, height: totalHeight), positions)
+        return (CGSize(width: maxWidth, height: totalHeight), positions, widths)
     }
 }
