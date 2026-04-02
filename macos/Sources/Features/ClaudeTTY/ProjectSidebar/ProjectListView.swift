@@ -36,6 +36,17 @@ struct ProjectListView: View {
                                     )
                                 }
                                 Divider()
+                                Menu("Open with") {
+                                    Button("Visual Studio Code") {
+                                        openWith("com.microsoft.VSCode", path: project.path)
+                                    }
+                                    if project.gitStatus != nil {
+                                        Button("Tower") {
+                                            openWith("com.fournova.Tower3", path: project.path)
+                                        }
+                                    }
+                                }
+                                Divider()
                                 Button("Remove Project", role: .destructive) {
                                     store.removeProject(path: project.path)
                                 }
@@ -91,6 +102,18 @@ struct ProjectListView: View {
         for project in store.projects {
             refreshGitStatus(for: project.path)
         }
+    }
+
+    private func openWith(_ bundleID: String, path: String) {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: bundleID
+        ) else { return }
+        let url = URL(fileURLWithPath: path)
+        NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: appURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
     }
 
     private func refreshGitStatus(for path: String) {
