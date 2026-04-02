@@ -158,15 +158,9 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
     config.sentry = b.option(
         bool,
         "sentry",
-        "Build with Sentry crash reporting. Default for macOS is true, false for any other system.",
+        "Build with Sentry crash reporting. Disabled for ClaudeTTY.",
     ) orelse sentry: {
-        switch (target.result.os.tag) {
-            .macos, .ios => break :sentry true,
-
-            // Note its false for linux because the crash reports on Linux
-            // don't have much useful information.
-            else => break :sentry false,
-        }
+        break :sentry false;
     };
 
     config.simd = b.option(
