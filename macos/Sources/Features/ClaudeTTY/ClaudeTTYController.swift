@@ -152,20 +152,23 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         centerContainer.subviews.forEach { $0.removeFromSuperview() }
         startupHostingView = nil
 
-        // Embed the terminal's view in the center container.
-        // TerminalController uses nib-based windows, so we access its content view.
-        // This will be refined in Task 11 when we validate the actual integration.
-        if let terminalView = controller.window?.contentView {
-            terminalView.removeFromSuperview()
-            terminalView.translatesAutoresizingMaskIntoConstraints = false
-            centerContainer.addSubview(terminalView)
-            NSLayoutConstraint.activate([
-                terminalView.topAnchor.constraint(equalTo: centerContainer.topAnchor),
-                terminalView.bottomAnchor.constraint(equalTo: centerContainer.bottomAnchor),
-                terminalView.leadingAnchor.constraint(equalTo: centerContainer.leadingAnchor),
-                terminalView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
-            ])
-        }
+        // Create a TerminalView using the controller as both view model and delegate.
+        // TerminalController conforms to TerminalViewModel and TerminalViewDelegate
+        // (inherited from BaseTerminalController).
+        let terminalView = TerminalView(
+            ghostty: ghostty,
+            viewModel: controller,
+            delegate: controller
+        )
+        let hostingView = NSHostingView(rootView: terminalView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        centerContainer.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: centerContainer.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: centerContainer.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: centerContainer.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
+        ])
 
         activeTerminalController = controller
         projectStore.setVisible(project.path)
@@ -201,16 +204,13 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     // MARK: - Command Execution
 
     func sendTextToActiveTerminal(_ text: String) {
-        guard let surfaceView = activeTerminalController?.focusedSurface else { return }
+        guard let surfaceView = activeTerminalController?.focusedSurface,
+              let surface = surfaceView.surface else { return }
         let fullText = text + "\r"
-        for c in fullText.utf8 {
-            let byte = UInt8(c)
-            withUnsafePointer(to: byte) { ptr in
-                // This will be refined in Task 11 when we wire
-                // the actual ghostty surface input method.
-                _ = ptr // suppress unused warning
-                _ = surfaceView // suppress unused warning
-            }
+        let len = fullText.utf8CString.count
+        guard len > 0 else { return }
+        fullText.withCString { ptr in
+            ghostty_surface_text(surface, ptr, UInt(len - 1))
         }
     }
 
