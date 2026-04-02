@@ -3,7 +3,7 @@ import SwiftUI
 import GhosttyKit
 import Combine
 
-/// Shared state between ClaudeTTYController and CommandPaletteView.
+/// Shared state between ClaudeTTYController and ClaudeTTYCommandPaletteView.
 final class CommandPaletteState: ObservableObject {
     @Published var isLocked: Bool = true
 }
@@ -97,7 +97,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
 
         // Right sidebar: command palette
         let rightView = NSHostingController(
-            rootView: CommandPaletteView(
+            rootView: ClaudeTTYCommandPaletteView(
                 store: commandStore,
                 state: commandPaletteState,
                 onSendCommand: { [weak self] text in
