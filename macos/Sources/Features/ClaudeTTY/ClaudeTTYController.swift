@@ -68,6 +68,12 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
+    }
+
     private func setupSplitView() {
         // Left sidebar: project list
         let leftView = NSHostingController(
@@ -166,6 +172,13 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         config.command = "claude"
 
         let controller = TerminalController(ghostty, withBaseConfig: config)
+
+        // Set focused surface manually since windowDidLoad won't run
+        // (we embed TerminalView directly, bypassing the nib-based window).
+        if case .leaf(let view) = controller.surfaceTree.root {
+            controller.focusedSurface = view
+        }
+
         terminalControllers[project.path] = controller
 
         projectStore.setActive(project.path, active: true)

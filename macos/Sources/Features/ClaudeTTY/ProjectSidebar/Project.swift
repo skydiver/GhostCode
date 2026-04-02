@@ -22,15 +22,13 @@ struct Project: Identifiable, Equatable {
         let behind: Int
 
         var displayText: String {
-            if !isDirty && ahead == 0 && behind == 0 {
-                return "\u{2713} clean"
-            }
-            if isDirty {
-                return "\u{25CF} \(changedFileCount) file\(changedFileCount == 1 ? "" : "s")"
-            }
             var parts: [String] = []
+            if isDirty {
+                parts.append("\u{25CF} \(changedFileCount) file\(changedFileCount == 1 ? "" : "s")")
+            }
             if ahead > 0 { parts.append("\u{2191}\(ahead)") }
             if behind > 0 { parts.append("\u{2193}\(behind)") }
+            if parts.isEmpty { return "\u{2713} clean" }
             return parts.joined(separator: " ")
         }
     }

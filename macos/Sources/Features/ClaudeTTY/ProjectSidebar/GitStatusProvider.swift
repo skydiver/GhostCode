@@ -45,19 +45,6 @@ final class GitStatusProvider {
             }
         }
 
-        // Also parse from branch line if present: "## main...origin/main [ahead 2, behind 1]"
-        if let bracketRange = branchLine.range(of: "\\[.*\\]", options: .regularExpression) {
-            let bracketContent = branchLine[bracketRange]
-            if let aheadMatch = bracketContent.range(of: "ahead (\\d+)", options: .regularExpression) {
-                let num = bracketContent[aheadMatch].split(separator: " ").last.flatMap { Int($0) }
-                ahead = num ?? ahead
-            }
-            if let behindMatch = bracketContent.range(of: "behind (\\d+)", options: .regularExpression) {
-                let num = bracketContent[behindMatch].split(separator: " ").last.flatMap { Int($0) }
-                behind = num ?? behind
-            }
-        }
-
         return Project.GitStatus(
             branch: branch,
             isDirty: isDirty,
@@ -70,20 +57,22 @@ final class GitStatusProvider {
     /// Runs a git command in the given directory and returns stdout.
     private static func runGit(_ args: [String], in directory: String) async -> String {
         await withCheckedContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["-C", directory] + args
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
+            DispatchQueue.global(qos: .utility).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                process.arguments = ["-C", directory] + args
+                process.standardOutput = Pipe()
+                process.standardError = Pipe()
 
-            do {
-                try process.run()
-                process.waitUntilExit()
-                let pipe = process.standardOutput as! Pipe
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-            } catch {
-                continuation.resume(returning: "")
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    let pipe = process.standardOutput as! Pipe
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
+                } catch {
+                    continuation.resume(returning: "")
+                }
             }
         }
     }
