@@ -84,6 +84,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
                 }
             )
         )
+        leftView.sizingOptions = []
         leftSidebarItem = NSSplitViewItem(sidebarWithViewController: leftView)
         leftSidebarItem.minimumThickness = 180
         leftSidebarItem.maximumThickness = 300
@@ -105,6 +106,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
                 }
             )
         )
+        rightView.sizingOptions = []
         rightSidebarItem = NSSplitViewItem(viewController: rightView)
         rightSidebarItem.minimumThickness = 160
         rightSidebarItem.maximumThickness = 280
@@ -169,7 +171,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     private func spawnTerminal(for project: Project) {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
-        config.command = "claude"
+        config.command = ClaudeTTYConfig.resolveCommand("claude")
 
         let controller = TerminalController(ghostty, withBaseConfig: config)
 
