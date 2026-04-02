@@ -53,7 +53,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = "ClaudeTTY"
-        window.minSize = NSSize(width: 600, height: 400)
+        window.minSize = NSSize(width: 1200, height: 750)
 
         super.init(window: window)
         window.delegate = self

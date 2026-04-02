@@ -44,6 +44,7 @@ struct ClaudeTTYCommandPaletteView: View {
         }
         .opacity(state.isLocked ? 0.4 : 1.0)
         .allowsHitTesting(!state.isLocked)
+        .disabled(state.isLocked)
     }
 }
 
