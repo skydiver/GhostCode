@@ -228,13 +228,20 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     }
 
     private func spawnTerminalAsync(for project: Project, resume: Bool) async {
-        let claudePath = await GhostCodeConfig.resolveCommand("claude")
+        let currentProject = projectStore.project(forPath: project.path) ?? project
+        let binary = currentProject.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
+        let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName)
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
         config.hushLogin = true
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let claudeCmd = resume ? "\(claudePath) --continue" : claudePath
-        config.command = "\(shell) -l -c 'exec \(claudeCmd)'"
+        let command: String
+        if resume, let resumeArg = binary.resumeArg {
+            command = "\(resolvedPath) \(resumeArg)"
+        } else {
+            command = resolvedPath
+        }
+        config.command = "\(shell) -l -c 'exec \(command)'"
 
         let controller = TerminalController(ghostty, withBaseConfig: config)
 
