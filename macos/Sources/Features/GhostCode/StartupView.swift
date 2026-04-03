@@ -54,10 +54,28 @@ struct StartupView: View {
 /// Landing page shown when a project is selected but no session is running.
 struct ProjectLandingView: View {
     let project: Project
+    let globalDefaultBinary: SupportedBinary
     let onStartSession: () -> Void
     let onResumeSession: () -> Void
+    let onBinaryChanged: (SupportedBinary) -> Void
 
+    @State private var selectedBinary: SupportedBinary
     @State private var sessionInfo = SessionInfoProvider.SessionInfo(count: 0, lastDate: nil)
+
+    init(
+        project: Project,
+        globalDefaultBinary: SupportedBinary,
+        onStartSession: @escaping () -> Void,
+        onResumeSession: @escaping () -> Void,
+        onBinaryChanged: @escaping (SupportedBinary) -> Void
+    ) {
+        self.project = project
+        self.globalDefaultBinary = globalDefaultBinary
+        self.onStartSession = onStartSession
+        self.onResumeSession = onResumeSession
+        self.onBinaryChanged = onBinaryChanged
+        self._selectedBinary = State(initialValue: project.binary ?? globalDefaultBinary)
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -72,7 +90,21 @@ struct ProjectLandingView: View {
                 .foregroundColor(.primary.opacity(0.8))
 
             VStack(spacing: 16) {
-                ProjectInfoSection(project: project, sessionInfo: sessionInfo)
+                ProjectInfoSection(
+                    project: project,
+                    sessionInfo: sessionInfo,
+                    showSessionInfo: selectedBinary.supportsSessionInfo
+                )
+
+                Picker("CLI", selection: $selectedBinary) {
+                    ForEach(SupportedBinary.allCases) { binary in
+                        Text(binary.displayName).tag(binary)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedBinary) { newValue in
+                    onBinaryChanged(newValue)
+                }
 
                 HStack(spacing: 10) {
                     LandingButton(
@@ -82,7 +114,7 @@ struct ProjectLandingView: View {
                         action: onStartSession
                     )
 
-                    if sessionInfo.count > 0 {
+                    if selectedBinary.resumeArg != nil && sessionInfo.count > 0 {
                         LandingButton(
                             title: "Resume Last Session",
                             icon: "arrow.counterclockwise",
@@ -99,8 +131,9 @@ struct ProjectLandingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
         .task {
-            let info = await SessionInfoProvider.info(for: project.path)
-            sessionInfo = info
+            if selectedBinary.supportsSessionInfo {
+                sessionInfo = await SessionInfoProvider.info(for: project.path)
+            }
         }
     }
 }
@@ -110,12 +143,15 @@ struct ProjectLandingView: View {
 private struct ProjectInfoSection: View {
     let project: Project
     let sessionInfo: SessionInfoProvider.SessionInfo
+    let showSessionInfo: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             InfoRow(icon: "folder", text: displayPath)
             InfoRow(icon: "arrow.triangle.branch", text: gitText)
-            InfoRow(icon: "text.bubble", text: sessionText(sessionInfo))
+            if showSessionInfo {
+                InfoRow(icon: "text.bubble", text: sessionText(sessionInfo))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)

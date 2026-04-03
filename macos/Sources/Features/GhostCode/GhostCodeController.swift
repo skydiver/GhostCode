@@ -173,13 +173,19 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     private func showProjectLanding(for project: Project) {
         centerContainer.subviews.forEach { $0.removeFromSuperview() }
 
+        let globalDefault = GhostCodeConfig.loadAppConfig().defaultBinary
+
         let landingView = ProjectLandingView(
             project: project,
+            globalDefaultBinary: globalDefault,
             onStartSession: { [weak self] in
                 self?.spawnTerminal(for: project)
             },
             onResumeSession: { [weak self] in
                 self?.spawnTerminal(for: project, resume: true)
+            },
+            onBinaryChanged: { [weak self] binary in
+                self?.projectStore.setBinary(project.path, binary: binary)
             }
         )
         let hostingView = NSHostingView(rootView: landingView)
