@@ -3,6 +3,48 @@ import os
 
 private let logger = Logger(subsystem: "com.flydev.ghostcode", category: "config")
 
+/// The set of CLI binaries GhostCode can wrap.
+enum SupportedBinary: String, Codable, CaseIterable, Identifiable {
+    case claude
+    case codex
+    case opencode
+
+    var id: String { rawValue }
+
+    var commandName: String {
+        switch self {
+        case .claude:   return "claude"
+        case .codex:    return "codex"
+        case .opencode: return "opencode"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .claude:   return "Claude Code"
+        case .codex:    return "Codex"
+        case .opencode: return "OpenCode"
+        }
+    }
+
+    /// The flag appended for "Resume" sessions. Nil means resume not supported.
+    var resumeArg: String? {
+        switch self {
+        case .claude:   return "--continue"
+        case .codex:    return nil
+        case .opencode: return nil
+        }
+    }
+
+    /// Whether this binary stores session data the app can read.
+    var supportsSessionInfo: Bool {
+        switch self {
+        case .claude:   return true
+        case .codex, .opencode: return false
+        }
+    }
+}
+
 /// Manages GhostCode-specific configuration paths and layered config loading.
 /// GhostCode config overrides Ghostty config using the same file format.
 enum GhostCodeConfig {
@@ -21,6 +63,28 @@ enum GhostCodeConfig {
 
     static var commandsFilePath: String {
         "\(configDirectory)/commands.json"
+    }
+
+    static var appConfigFilePath: String {
+        "\(configDirectory)/config.json"
+    }
+
+    struct AppConfig: Codable {
+        var defaultBinary: SupportedBinary
+
+        static let `default` = AppConfig(defaultBinary: .claude)
+    }
+
+    /// Loads the GhostCode app config. Falls back to defaults if missing or malformed.
+    /// - Parameter path: Override path for testing. Uses `appConfigFilePath` when nil.
+    static func loadAppConfig(from path: String? = nil) -> AppConfig {
+        let filePath = path ?? appConfigFilePath
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
+              let config = try? JSONDecoder().decode(AppConfig.self, from: data)
+        else {
+            return .default
+        }
+        return config
     }
 
     /// Ensures the config directory exists. Call once at app startup.
