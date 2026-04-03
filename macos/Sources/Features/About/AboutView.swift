@@ -50,7 +50,7 @@ struct AboutView: View {
                     Text("GhostCode")
                         .bold()
                         .font(.title)
-                    Text("Claude Code terminal manager.\nBased on Ghostty.")
+                    Text("AI coding terminal manager.\nBased on Ghostty.")
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .font(.caption)

@@ -130,7 +130,7 @@ struct ProjectLandingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .task {
+        .task(id: selectedBinary) {
             if selectedBinary.supportsSessionInfo {
                 sessionInfo = await SessionInfoProvider.info(for: project.path)
             }
