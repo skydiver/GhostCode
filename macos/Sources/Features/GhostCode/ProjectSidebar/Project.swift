@@ -7,6 +7,7 @@ struct Project: Identifiable, Equatable {
     let name: String
     var state: State
     var gitStatus: GitStatus?
+    var binary: SupportedBinary?
 
     enum State: Equatable {
         case inactive
@@ -33,10 +34,11 @@ struct Project: Identifiable, Equatable {
         }
     }
 
-    init(path: String, state: State = .inactive) {
+    init(path: String, state: State = .inactive, binary: SupportedBinary? = nil) {
         self.id = path
         self.path = path
         self.name = URL(fileURLWithPath: path).lastPathComponent
         self.state = state
+        self.binary = binary
     }
 }
