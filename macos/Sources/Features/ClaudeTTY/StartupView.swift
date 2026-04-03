@@ -43,9 +43,7 @@ struct ProjectLandingView: View {
     let onStartSession: () -> Void
     let onResumeSession: () -> Void
 
-    private var sessionInfo: SessionInfoProvider.SessionInfo {
-        SessionInfoProvider.info(for: project.path)
-    }
+    @State private var sessionInfo = SessionInfoProvider.SessionInfo(count: 0, lastDate: nil)
 
     var body: some View {
         VStack(spacing: 24) {
@@ -86,6 +84,10 @@ struct ProjectLandingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+        .task {
+            let info = await SessionInfoProvider.info(for: project.path)
+            sessionInfo = info
+        }
     }
 }
 
@@ -163,31 +165,39 @@ enum SessionInfoProvider {
         let lastDate: Date?
     }
 
-    static func info(for projectPath: String) -> SessionInfo {
-        let encoded = projectPath.replacingOccurrences(of: "/", with: "-")
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let sessionsDir = "\(home)/.claude/projects/\(encoded)"
+    static func info(for projectPath: String) async -> SessionInfo {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let encoded = projectPath.replacingOccurrences(of: "/", with: "-")
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                let sessionsDir = "\(home)/.claude/projects/\(encoded)"
 
-        let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(atPath: sessionsDir) else {
-            return SessionInfo(count: 0, lastDate: nil)
-        }
-
-        let jsonlFiles = contents.filter { $0.hasSuffix(".jsonl") }
-        guard !jsonlFiles.isEmpty else { return SessionInfo(count: 0, lastDate: nil) }
-
-        var latestDate: Date?
-        for file in jsonlFiles {
-            let fullPath = "\(sessionsDir)/\(file)"
-            if let attrs = try? fm.attributesOfItem(atPath: fullPath),
-               let modified = attrs[.modificationDate] as? Date {
-                if latestDate == nil || modified > latestDate! {
-                    latestDate = modified
+                let fm = FileManager.default
+                guard let contents = try? fm.contentsOfDirectory(atPath: sessionsDir) else {
+                    continuation.resume(returning: SessionInfo(count: 0, lastDate: nil))
+                    return
                 }
+
+                let jsonlFiles = contents.filter { $0.hasSuffix(".jsonl") }
+                guard !jsonlFiles.isEmpty else {
+                    continuation.resume(returning: SessionInfo(count: 0, lastDate: nil))
+                    return
+                }
+
+                var latestDate: Date?
+                for file in jsonlFiles {
+                    let fullPath = "\(sessionsDir)/\(file)"
+                    if let attrs = try? fm.attributesOfItem(atPath: fullPath),
+                       let modified = attrs[.modificationDate] as? Date {
+                        if latestDate == nil || modified > latestDate! {
+                            latestDate = modified
+                        }
+                    }
+                }
+
+                continuation.resume(returning: SessionInfo(count: jsonlFiles.count, lastDate: latestDate))
             }
         }
-
-        return SessionInfo(count: jsonlFiles.count, lastDate: latestDate)
     }
 }
 

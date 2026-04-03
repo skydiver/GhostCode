@@ -20,6 +20,12 @@ class SurfaceScrollView: NSView {
     private var cancellables: Set<AnyCancellable> = []
     private var isLiveScrolling = false
 
+    /// Tracks the last size sent to the core surface to skip redundant calls.
+    private var lastCoreSurfaceSize: CGSize = .zero
+
+    /// Timestamp of the last resize call, used to throttle during live resize.
+    private var lastResizeTime: CFAbsoluteTime = 0
+
     /// The last row position sent via scroll_to_row action. Used to avoid
     /// sending redundant actions when the user drags the scrollbar but stays
     /// on the same row.
@@ -205,15 +211,35 @@ class SurfaceScrollView: NSView {
     /// Inform the actual pty of our size change. This doesn't change the actual view
     /// frame because we do want to render the whole thing, but it will prevent our
     /// rows/cols from going into the non-content area.
+    ///
+    /// Throttled during live resize to reduce mailbox pressure on the IO thread,
+    /// which can otherwise block the main thread when the queue is full.
     private func synchronizeCoreSurface() {
         // Only update the pty if we have a valid (non-zero) content size. The content size
         // can be zero when this is added early to a view, or to an invisible hierarchy.
         // Practically, this happened in the quick terminal.
         let width = scrollView.contentSize.width
         let height = surfaceView.frame.height
-        if width > 0 && height > 0 {
-            surfaceView.sizeDidChange(CGSize(width: width, height: height))
+        guard width > 0 && height > 0 else { return }
+        let size = CGSize(width: width, height: height)
+        guard size != lastCoreSurfaceSize else { return }
+
+        // During live resize, throttle to ~30fps to avoid flooding the IO mailbox.
+        if let window, window.inLiveResize {
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastResizeTime < 1.0 / 30.0 { return }
+            lastResizeTime = now
         }
+
+        lastCoreSurfaceSize = size
+        surfaceView.sizeDidChange(size)
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        // Force the final size through after throttling stops.
+        lastCoreSurfaceSize = .zero
+        synchronizeCoreSurface()
     }
 
     /// Sizes the document view and scrolls the content view according to the scrollbar state

@@ -213,9 +213,15 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     }
 
     private func spawnTerminal(for project: Project, resume: Bool = false) {
+        Task {
+            await spawnTerminalAsync(for: project, resume: resume)
+        }
+    }
+
+    private func spawnTerminalAsync(for project: Project, resume: Bool) async {
+        let claudePath = await ClaudeTTYConfig.resolveCommand("claude")
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
-        let claudePath = ClaudeTTYConfig.resolveCommand("claude")
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let claudeCmd = resume ? "\(claudePath) --continue" : claudePath
         config.command = "\(shell) -l -c 'exec \(claudeCmd)'"
@@ -253,6 +259,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
                 delegate: controller
             )
             let hostingView = NSHostingView(rootView: terminalView)
+            hostingView.sizingOptions = []
             hostingView.translatesAutoresizingMaskIntoConstraints = false
             hostingView.frame = self.centerContainer.bounds
             self.centerContainer.addSubview(hostingView)
@@ -271,7 +278,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     }
 
     private func observeTerminalExit(_ controller: TerminalController, projectPath: String) {
-        let cancellable = Timer.publish(every: 0.3, on: .main, in: .common)
+        let cancellable = Timer.publish(every: 1.0, on: .main, in: .default)
             .autoconnect()
             .first(where: { [weak self] _ in
                 self?.isProcessExited(controller) ?? true

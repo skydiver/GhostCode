@@ -8,7 +8,7 @@ struct ProjectListView: View {
     @State private var gitRefreshTimer = Timer.publish(
         every: GitStatusProvider.refreshInterval,
         on: .main,
-        in: .common
+        in: .default
     ).autoconnect()
 
     var body: some View {
