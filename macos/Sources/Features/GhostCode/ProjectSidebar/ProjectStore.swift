@@ -1,6 +1,12 @@
 import Foundation
 import Combine
 
+/// On-disk representation of a project entry with optional binary preference.
+private struct ProjectEntry: Codable {
+    let path: String
+    var binary: SupportedBinary?
+}
+
 /// Manages the list of GhostCode projects. Persists to JSON.
 final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
@@ -59,6 +65,12 @@ final class ProjectStore: ObservableObject {
         projects[index].gitStatus = status
     }
 
+    func setBinary(_ path: String, binary: SupportedBinary?) {
+        guard let index = projects.firstIndex(where: { $0.path == path }) else { return }
+        projects[index].binary = binary
+        saveToDisk()
+    }
+
     func project(forPath path: String) -> Project? {
         projects.first { $0.path == path }
     }
@@ -81,16 +93,24 @@ final class ProjectStore: ObservableObject {
 
     private func loadFromDisk() {
         guard FileManager.default.fileExists(atPath: filePath),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-              let paths = try? JSONDecoder().decode([String].self, from: data)
+              let data = try? Data(contentsOf: URL(fileURLWithPath: filePath))
         else { return }
 
-        projects = paths.map { Project(path: $0) }
+        // Try new format: [ProjectEntry]
+        if let entries = try? JSONDecoder().decode([ProjectEntry].self, from: data) {
+            projects = entries.map { Project(path: $0.path, binary: $0.binary) }
+            return
+        }
+
+        // Fall back to legacy format: [String]
+        if let paths = try? JSONDecoder().decode([String].self, from: data) {
+            projects = paths.map { Project(path: $0) }
+        }
     }
 
     private func saveToDisk() {
-        let paths = projects.map(\.path)
-        guard let data = try? JSONEncoder().encode(paths) else { return }
+        let entries = projects.map { ProjectEntry(path: $0.path, binary: $0.binary) }
+        guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: URL(fileURLWithPath: filePath), options: .atomic)
     }
 }

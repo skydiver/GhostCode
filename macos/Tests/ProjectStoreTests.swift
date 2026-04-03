@@ -63,4 +63,58 @@ final class ProjectStoreTests: XCTestCase {
         XCTAssertEqual(store.projects[0].state, .activeVisible)
         XCTAssertEqual(store.projects[1].state, .activeBackground)
     }
+
+    func testMigratesLegacyStringFormat() throws {
+        let paths = ["/tmp/project-a", "/tmp/project-b"]
+        let data = try JSONEncoder().encode(paths)
+        try data.write(to: tempFile)
+
+        let migrated = ProjectStore(filePath: tempFile.path)
+        XCTAssertEqual(migrated.projects.count, 2)
+        XCTAssertEqual(migrated.projects[0].path, "/tmp/project-a")
+        XCTAssertEqual(migrated.projects[1].path, "/tmp/project-b")
+        XCTAssertNil(migrated.projects[0].binary)
+        XCTAssertNil(migrated.projects[1].binary)
+    }
+
+    func testSetBinary() {
+        store.addProject(path: "/tmp/project-a")
+        store.setBinary("/tmp/project-a", binary: .opencode)
+        XCTAssertEqual(store.projects[0].binary, .opencode)
+    }
+
+    func testSetBinaryToNil() {
+        store.addProject(path: "/tmp/project-a")
+        store.setBinary("/tmp/project-a", binary: .codex)
+        store.setBinary("/tmp/project-a", binary: nil)
+        XCTAssertNil(store.projects[0].binary)
+    }
+
+    func testPersistsBinaryPreference() {
+        store.addProject(path: "/tmp/project-a")
+        store.setBinary("/tmp/project-a", binary: .codex)
+
+        let reloaded = ProjectStore(filePath: tempFile.path)
+        XCTAssertEqual(reloaded.projects[0].binary, .codex)
+    }
+
+    func testLegacyFormatSurvivesRoundTrip() throws {
+        let paths = ["/tmp/project-a"]
+        let data = try JSONEncoder().encode(paths)
+        try data.write(to: tempFile)
+
+        let migrated = ProjectStore(filePath: tempFile.path)
+        migrated.addProject(path: "/tmp/project-b")
+
+        let reloaded = ProjectStore(filePath: tempFile.path)
+        XCTAssertEqual(reloaded.projects.count, 2)
+        XCTAssertEqual(reloaded.projects[0].path, "/tmp/project-a")
+        XCTAssertEqual(reloaded.projects[1].path, "/tmp/project-b")
+    }
+
+    func testSetBinaryForUnknownPathIsNoOp() {
+        store.addProject(path: "/tmp/project-a")
+        store.setBinary("/tmp/nonexistent", binary: .codex)
+        XCTAssertNil(store.projects[0].binary)
+    }
 }
