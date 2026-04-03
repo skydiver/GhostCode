@@ -318,7 +318,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     func sendTextToActiveTerminal(_ text: String) {
         guard let surfaceView = activeTerminalController?.focusedSurface,
               let surface = surfaceView.surface else { return }
-        let fullText = text + "\r"
+        let fullText = text
         let len = fullText.utf8CString.count
         guard len > 0 else { return }
         fullText.withCString { ptr in
