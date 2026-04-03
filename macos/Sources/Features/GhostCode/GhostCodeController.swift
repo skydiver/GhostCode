@@ -212,6 +212,12 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             switchToTerminal(existingController, project: project)
             return
         }
+
+        // Already showing the landing page for this project — don't recreate it.
+        if activeTerminalController == nil && projectStore.selectedPath == project.path {
+            return
+        }
+
         showProjectLanding(for: project)
     }
 
@@ -303,6 +309,8 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
            let controller = terminalControllers[previousPath],
            let project = projectStore.project(forPath: previousPath) {
             switchToTerminal(controller, project: project)
+        } else if let project = projectStore.project(forPath: projectPath) {
+            showProjectLanding(for: project)
         } else {
             showStartupScreen()
         }
