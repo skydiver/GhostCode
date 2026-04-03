@@ -133,6 +133,8 @@ struct ProjectLandingView: View {
         .task(id: selectedBinary) {
             if selectedBinary.supportsSessionInfo {
                 sessionInfo = await SessionInfoProvider.info(for: project.path)
+            } else {
+                sessionInfo = SessionInfoProvider.SessionInfo(count: 0, lastDate: nil)
             }
         }
     }
