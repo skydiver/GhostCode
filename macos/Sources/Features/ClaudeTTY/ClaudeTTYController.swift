@@ -54,6 +54,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         )
         window.title = "ClaudeTTY"
         window.minSize = NSSize(width: 1200, height: 750)
+        window.tabbingMode = .disallowed
 
         super.init(window: window)
         window.delegate = self
@@ -95,6 +96,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         leftSidebarItem.minimumThickness = 180
         leftSidebarItem.maximumThickness = 300
         leftSidebarItem.canCollapse = true
+        leftView.preferredContentSize = NSSize(width: 300, height: 0)
 
         // Center: terminal or startup screen
         let centerVC = NSViewController()
@@ -115,8 +117,9 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         rightView.sizingOptions = []
         rightSidebarItem = NSSplitViewItem(viewController: rightView)
         rightSidebarItem.minimumThickness = 160
-        rightSidebarItem.maximumThickness = 280
+        rightSidebarItem.maximumThickness = 340
         rightSidebarItem.canCollapse = true
+        rightView.preferredContentSize = NSSize(width: 340, height: 0)
 
         splitViewController.addSplitViewItem(leftSidebarItem)
         splitViewController.addSplitViewItem(centerItem)
