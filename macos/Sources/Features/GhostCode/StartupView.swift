@@ -89,22 +89,26 @@ struct ProjectLandingView: View {
                 .font(.system(size: 22, weight: .medium))
                 .foregroundColor(.primary.opacity(0.8))
 
+            Picker(selection: $selectedBinary) {
+                ForEach(SupportedBinary.allCases) { binary in
+                    Text(binary.displayName).tag(binary)
+                }
+            } label: {
+                EmptyView()
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.large)
+            .frame(width: 420)
+            .onChange(of: selectedBinary) { newValue in
+                onBinaryChanged(newValue)
+            }
+
             VStack(spacing: 16) {
                 ProjectInfoSection(
                     project: project,
                     sessionInfo: sessionInfo,
                     showSessionInfo: selectedBinary.supportsSessionInfo
                 )
-
-                Picker("CLI", selection: $selectedBinary) {
-                    ForEach(SupportedBinary.allCases) { binary in
-                        Text(binary.displayName).tag(binary)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: selectedBinary) { newValue in
-                    onBinaryChanged(newValue)
-                }
 
                 HStack(spacing: 10) {
                     LandingButton(
@@ -153,6 +157,9 @@ private struct ProjectInfoSection: View {
             InfoRow(icon: "arrow.triangle.branch", text: gitText)
             if showSessionInfo {
                 InfoRow(icon: "text.bubble", text: sessionText(sessionInfo))
+            } else {
+                InfoRow(icon: "text.bubble", text: " ")
+                    .opacity(0)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
