@@ -1354,6 +1354,13 @@ input: RepeatableReadableIO = .{},
 /// This is primarily useful for scripts or debugging.
 @"wait-after-command": bool = false,
 
+/// If true, suppress the "Last login" message on macOS by always passing
+/// the `-q` flag to `login(1)`. This is useful when spawning a custom
+/// command where the login banner is unwanted noise.
+///
+/// On non-macOS platforms, this option has no effect.
+@"hush-login": bool = false,
+
 /// The number of milliseconds of runtime below which we consider a process exit
 /// to be abnormal. This is used to show an error message when the process exits
 /// too quickly.

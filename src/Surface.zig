@@ -638,6 +638,7 @@ pub fn init(
             .env_override = config.env,
             .shell_integration = config.@"shell-integration",
             .shell_integration_features = config.@"shell-integration-features",
+            .hush_login = config.@"hush-login",
             .cursor_blink = config.@"cursor-style-blink",
             .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
             .resources_dir = global_state.resources_dir.host(),

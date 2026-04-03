@@ -458,6 +458,9 @@ pub const Surface = struct {
         /// Wait after the command exits
         wait_after_command: bool = false,
 
+        /// Suppress the "Last login" message on macOS.
+        hush_login: bool = false,
+
         /// Context for the new surface
         context: apprt.surface.NewSurfaceContext = .window,
     };
@@ -571,6 +574,11 @@ pub const Surface = struct {
         // Wait after command
         if (opts.wait_after_command) {
             config.@"wait-after-command" = true;
+        }
+
+        // Hush login
+        if (opts.hush_login) {
+            config.@"hush-login" = true;
         }
 
         // Initialize our surface right away. We're given a view that is

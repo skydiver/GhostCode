@@ -566,6 +566,7 @@ pub const Config = struct {
     working_directory: ?[]const u8 = null,
     resources_dir: ?[]const u8,
     term: []const u8,
+    hush_login: bool = false,
 
     rt_pre_exec_info: Command.RtPreExecInfo,
     rt_post_fork_info: Command.RtPostForkInfo,
@@ -818,6 +819,7 @@ const Subprocess = struct {
             alloc,
             shell_command,
             internal_os.passwd,
+            cfg.hush_login,
         ) catch |err| switch (err) {
             // If we fail to allocate space for the command we want to
             // execute, we'd still like to try to run something so
@@ -1412,6 +1414,7 @@ fn execCommand(
     alloc: Allocator,
     command: configpkg.Command,
     comptime passwdpkg: type,
+    force_hush: bool,
 ) (Allocator.Error || error{SystemError})![]const [:0]const u8 {
     // If we're on macOS, we have to use `login(1)` to get all of
     // the proper environment variables set, a login shell, and proper
@@ -1427,7 +1430,7 @@ fn execCommand(
             break :darwin;
         };
 
-        const hush = if (passwd.home) |home| hush: {
+        const hush = force_hush or if (passwd.home) |home| hush: {
             var dir = std.fs.openDirAbsolute(home, .{}) catch |err| {
                 log.warn(
                     "failed to open home dir, not checking for hushlogin err={}",
@@ -1594,7 +1597,7 @@ test "execCommand darwin: shell command" {
                 .name = "testuser",
             };
         }
-    });
+    }, false);
 
     try testing.expectEqual(8, result.len);
     try testing.expectEqualStrings(result[0], "/usr/bin/login");
@@ -1605,6 +1608,34 @@ test "execCommand darwin: shell command" {
     try testing.expectEqualStrings(result[5], "--norc");
     try testing.expectEqualStrings(result[6], "-c");
     try testing.expectEqualStrings(result[7], "exec -l foo bar baz");
+}
+
+test "execCommand darwin: shell command with force_hush" {
+    if (comptime !builtin.os.tag.isDarwin()) return error.SkipZigTest;
+
+    const testing = std.testing;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const result = try execCommand(alloc, .{ .shell = "foo bar baz" }, struct {
+        fn get(_: Allocator) !PasswdEntry {
+            return .{
+                .name = "testuser",
+            };
+        }
+    }, true);
+
+    try testing.expectEqual(9, result.len);
+    try testing.expectEqualStrings(result[0], "/usr/bin/login");
+    try testing.expectEqualStrings(result[1], "-q");
+    try testing.expectEqualStrings(result[2], "-flp");
+    try testing.expectEqualStrings(result[3], "testuser");
+    try testing.expectEqualStrings(result[4], "/bin/bash");
+    try testing.expectEqualStrings(result[5], "--noprofile");
+    try testing.expectEqualStrings(result[6], "--norc");
+    try testing.expectEqualStrings(result[7], "-c");
+    try testing.expectEqualStrings(result[8], "exec -l foo bar baz");
 }
 
 test "execCommand darwin: direct command" {
@@ -1624,7 +1655,7 @@ test "execCommand darwin: direct command" {
                 .name = "testuser",
             };
         }
-    });
+    }, false);
 
     try testing.expectEqual(5, result.len);
     try testing.expectEqualStrings(result[0], "/usr/bin/login");
@@ -1652,6 +1683,7 @@ test "execCommand: shell command, empty passwd" {
                 return .{};
             }
         },
+        false,
     );
 
     try testing.expectEqual(3, result.len);
@@ -1678,6 +1710,7 @@ test "execCommand: shell command, error passwd" {
                 return error.Fail;
             }
         },
+        false,
     );
 
     try testing.expectEqual(3, result.len);
@@ -1705,7 +1738,7 @@ test "execCommand: direct command, error passwd" {
             // login command and falls back to POSIX behavior.
             return error.Fail;
         }
-    });
+    }, false);
 
     try testing.expectEqual(2, result.len);
     try testing.expectEqualStrings(result[0], "foo");
@@ -1735,7 +1768,7 @@ test "execCommand: direct command, config freed" {
             // login command and falls back to POSIX behavior.
             return error.Fail;
         }
-    });
+    }, false);
 
     command_arena.deinit();
 

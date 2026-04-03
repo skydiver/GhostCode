@@ -659,6 +659,9 @@ extension Ghostty {
         /// Wait after the command
         var waitAfterCommand: Bool = false
 
+        /// Suppress the "Last login" message on macOS
+        var hushLogin: Bool = false
+
         /// Context for surface creation
         var context: ghostty_surface_context_e = GHOSTTY_SURFACE_CONTEXT_WINDOW
 
@@ -716,6 +719,9 @@ extension Ghostty {
 
             // Set wait after command
             config.wait_after_command = waitAfterCommand
+
+            // Set hush login
+            config.hush_login = hushLogin
 
             // Set context
             config.context = context

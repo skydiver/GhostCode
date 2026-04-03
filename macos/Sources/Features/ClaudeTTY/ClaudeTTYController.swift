@@ -222,6 +222,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
         let claudePath = await ClaudeTTYConfig.resolveCommand("claude")
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
+        config.hushLogin = true
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let claudeCmd = resume ? "\(claudePath) --continue" : claudePath
         config.command = "\(shell) -l -c 'exec \(claudeCmd)'"
