@@ -3,14 +3,14 @@ import SwiftUI
 import GhosttyKit
 import Combine
 
-/// Shared state between ClaudeTTYController and ClaudeTTYCommandPaletteView.
+/// Shared state between GhostCodeController and GhostCodeCommandPaletteView.
 final class CommandPaletteState: ObservableObject {
     @Published var isLocked: Bool = true
 }
 
-/// The main ClaudeTTY window controller. Manages a three-panel layout:
+/// The main GhostCode window controller. Manages a three-panel layout:
 /// left sidebar (projects), center (terminal or startup), right sidebar (commands).
-final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
+final class GhostCodeController: NSWindowController, NSWindowDelegate {
     let ghostty: Ghostty.App
 
     private let splitViewController = NSSplitViewController()
@@ -52,7 +52,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "ClaudeTTY"
+        window.title = "GhostCode"
         window.minSize = NSSize(width: 1200, height: 750)
         window.tabbingMode = .disallowed
 
@@ -64,8 +64,8 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
 
         // Restore saved frame after all subviews are set up, so the split
         // view layout doesn't override the restored geometry.
-        window.setFrameAutosaveName("ClaudeTTYMainWindow")
-        if !window.setFrameUsingName("ClaudeTTYMainWindow") {
+        window.setFrameAutosaveName("GhostCodeMainWindow")
+        if !window.setFrameUsingName("GhostCodeMainWindow") {
             window.center()
         }
     }
@@ -106,7 +106,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
 
         // Right sidebar: command palette
         let rightView = NSHostingController(
-            rootView: ClaudeTTYCommandPaletteView(
+            rootView: GhostCodeCommandPaletteView(
                 store: commandStore,
                 state: commandPaletteState,
                 onSendCommand: { [weak self] text in
@@ -222,7 +222,7 @@ final class ClaudeTTYController: NSWindowController, NSWindowDelegate {
     }
 
     private func spawnTerminalAsync(for project: Project, resume: Bool) async {
-        let claudePath = await ClaudeTTYConfig.resolveCommand("claude")
+        let claudePath = await GhostCodeConfig.resolveCommand("claude")
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
         config.hushLogin = true

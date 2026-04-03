@@ -158,7 +158,7 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
     config.sentry = b.option(
         bool,
         "sentry",
-        "Build with Sentry crash reporting. Disabled for ClaudeTTY.",
+        "Build with Sentry crash reporting. Disabled for GhostCode.",
     ) orelse sentry: {
         break :sentry false;
     };

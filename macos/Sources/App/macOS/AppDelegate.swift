@@ -88,8 +88,8 @@ class AppDelegate: NSObject,
     /// This is only true before application has become active.
     private var applicationHasBecomeActive: Bool = false
 
-    /// The main ClaudeTTY window controller.
-    private(set) var claudeTTYController: ClaudeTTYController?
+    /// The main GhostCode window controller.
+    private(set) var ghostCodeController: GhostCodeController?
 
     /// This is set in applicationDidFinishLaunching with the system uptime so we can determine the
     /// seconds since the process was launched.
@@ -210,8 +210,8 @@ class AppDelegate: NSObject,
             "ApplePressAndHoldEnabled": false,
         ])
 
-        // Ensure ClaudeTTY config directory exists
-        ClaudeTTYConfig.ensureConfigDirectory()
+        // Ensure GhostCode config directory exists
+        GhostCodeConfig.ensureConfigDirectory()
 
         // Store our start time
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
@@ -358,12 +358,12 @@ class AppDelegate: NSObject,
         if !applicationHasBecomeActive {
             applicationHasBecomeActive = true
 
-            // Launch the main ClaudeTTY window on first activation.
-            if claudeTTYController == nil && derivedConfig.initialWindow {
+            // Launch the main GhostCode window on first activation.
+            if ghostCodeController == nil && derivedConfig.initialWindow {
                 undoManager.disableUndoRegistration()
-                let controller = ClaudeTTYController(ghostty)
+                let controller = GhostCodeController(ghostty)
                 controller.showWindow(self)
-                self.claudeTTYController = controller
+                self.ghostCodeController = controller
                 undoManager.enableUndoRegistration()
             }
         }
@@ -417,9 +417,9 @@ class AppDelegate: NSObject,
 
         // We have some visible window. Show an app-wide modal to confirm quitting.
         let alert = NSAlert()
-        alert.messageText = "Quit ClaudeTTY?"
+        alert.messageText = "Quit GhostCode?"
         alert.informativeText = "All terminal sessions will be terminated."
-        alert.addButton(withTitle: "Close ClaudeTTY")
+        alert.addButton(withTitle: "Close GhostCode")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
         switch alert.runModal() {
@@ -445,8 +445,8 @@ class AppDelegate: NSObject,
         // of focusing one of them.
         guard !flag else { return true }
 
-        // If we have our ClaudeTTY window, just show it
-        if let controller = claudeTTYController {
+        // If we have our GhostCode window, just show it
+        if let controller = ghostCodeController {
             controller.showWindow(self)
             controller.window?.makeKeyAndOrderFront(nil)
             return false
@@ -457,10 +457,10 @@ class AppDelegate: NSObject,
         // but I haven't seen it happen in releases. I'm unsure why.
         guard applicationHasBecomeActive else { return true }
 
-        // Create the ClaudeTTY window if it doesn't exist
-        let controller = ClaudeTTYController(ghostty)
+        // Create the GhostCode window if it doesn't exist
+        let controller = GhostCodeController(ghostty)
         controller.showWindow(self)
-        self.claudeTTYController = controller
+        self.ghostCodeController = controller
         return false
     }
 
@@ -513,7 +513,7 @@ class AppDelegate: NSObject,
             // may want to show this as a sheet on the focused window (especially if we're
             // opening a tab). I'm not sure.
             let alert = NSAlert()
-            alert.messageText = "Allow ClaudeTTY to execute \"\(filename)\"?"
+            alert.messageText = "Allow GhostCode to execute \"\(filename)\"?"
             alert.addButton(withTitle: "Allow")
             alert.addButton(withTitle: "Cancel")
             alert.alertStyle = .warning
@@ -726,8 +726,8 @@ class AppDelegate: NSObject,
     }
 
     @objc private func ghosttyNewWindow(_ notification: Notification) {
-        // In ClaudeTTY mode, show the existing window instead of creating new ones
-        if let controller = claudeTTYController {
+        // In GhostCode mode, show the existing window instead of creating new ones
+        if let controller = ghostCodeController {
             controller.showWindow(self)
             return
         }
@@ -738,8 +738,8 @@ class AppDelegate: NSObject,
     }
 
     @objc private func ghosttyNewTab(_ notification: Notification) {
-        // In ClaudeTTY mode, tabs are managed via the project sidebar
-        if claudeTTYController != nil { return }
+        // In GhostCode mode, tabs are managed via the project sidebar
+        if ghostCodeController != nil { return }
 
         guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
         guard let window = surfaceView.window else { return }
@@ -971,8 +971,8 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
-        // In ClaudeTTY mode, show the existing window instead of creating new ones
-        if let controller = claudeTTYController {
+        // In GhostCode mode, show the existing window instead of creating new ones
+        if let controller = ghostCodeController {
             controller.showWindow(self)
             return
         }
@@ -980,8 +980,8 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newTab(_ sender: Any?) {
-        // In ClaudeTTY mode, tabs are managed via the project sidebar
-        if claudeTTYController != nil { return }
+        // In GhostCode mode, tabs are managed via the project sidebar
+        if ghostCodeController != nil { return }
         _ = TerminalController.newTab(
             ghostty,
             from: TerminalController.preferredParent?.window
@@ -1369,7 +1369,7 @@ extension AppDelegate {
                 let alert = NSAlert()
                 alert.messageText = "Failed to Set Default Terminal"
                 alert.informativeText = """
-                ClaudeTTY could not be set as the default terminal application.
+                GhostCode could not be set as the default terminal application.
 
                 Error: \(error.localizedDescription)
                 """

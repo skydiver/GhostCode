@@ -1,6 +1,6 @@
 import Foundation
 
-/// Represents a project in the ClaudeTTY sidebar.
+/// Represents a project in the GhostCode sidebar.
 struct Project: Identifiable, Equatable {
     let id: String
     let path: String

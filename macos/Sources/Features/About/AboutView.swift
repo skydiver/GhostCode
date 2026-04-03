@@ -47,7 +47,7 @@ struct AboutView: View {
 
             VStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .center, spacing: 8) {
-                    Text("ClaudeTTY")
+                    Text("GhostCode")
                         .bold()
                         .font(.title)
                     Text("Claude Code terminal manager.\nBased on Ghostty.")

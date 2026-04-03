@@ -10,7 +10,7 @@ extension UpdateDriver: SPUUpdaterDelegate {
         // Sparkle supports a native concept of "channels" but it requires that
         // you share a single appcast file. We don't want to do that so we
         // do this instead.
-        // Auto-update disabled for ClaudeTTY — no upstream feed.
+        // Auto-update disabled for GhostCode — no upstream feed.
         _ = appDelegate
         return nil
     }

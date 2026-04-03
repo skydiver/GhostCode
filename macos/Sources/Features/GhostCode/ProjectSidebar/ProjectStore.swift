@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// Manages the list of ClaudeTTY projects. Persists to JSON.
+/// Manages the list of GhostCode projects. Persists to JSON.
 final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published private(set) var selectedPath: String?
@@ -10,7 +10,7 @@ final class ProjectStore: ObservableObject {
     private var activationHistory: [String] = []
 
     init(filePath: String? = nil) {
-        self.filePath = filePath ?? ClaudeTTYConfig.projectsFilePath
+        self.filePath = filePath ?? GhostCodeConfig.projectsFilePath
         loadFromDisk()
     }
 

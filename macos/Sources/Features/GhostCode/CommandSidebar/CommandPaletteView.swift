@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The right sidebar view showing configurable command buttons.
-struct ClaudeTTYCommandPaletteView: View {
+struct GhostCodeCommandPaletteView: View {
     @ObservedObject var store: CommandStore
     @ObservedObject var state: CommandPaletteState
     let onSendCommand: (String) -> Void

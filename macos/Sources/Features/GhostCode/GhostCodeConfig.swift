@@ -1,14 +1,14 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.claudetty.app", category: "config")
+private let logger = Logger(subsystem: "com.flydev.ghostcode", category: "config")
 
-/// Manages ClaudeTTY-specific configuration paths and layered config loading.
-/// ClaudeTTY config overrides Ghostty config using the same file format.
-enum ClaudeTTYConfig {
+/// Manages GhostCode-specific configuration paths and layered config loading.
+/// GhostCode config overrides Ghostty config using the same file format.
+enum GhostCodeConfig {
     static var configDirectory: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.config/claudetty"
+        return "\(home)/.config/ghostcode"
     }
 
     static var configFilePath: String {
@@ -31,7 +31,7 @@ enum ClaudeTTYConfig {
                 withIntermediateDirectories: true
             )
         } catch {
-            logger.error("Failed to create ClaudeTTY config directory: \(error)")
+            logger.error("Failed to create GhostCode config directory: \(error)")
         }
     }
 

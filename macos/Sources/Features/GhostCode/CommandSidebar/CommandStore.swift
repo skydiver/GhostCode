@@ -27,7 +27,7 @@ final class CommandStore: ObservableObject {
     private let filePath: String
 
     init(filePath: String? = nil) {
-        self.filePath = filePath ?? ClaudeTTYConfig.commandsFilePath
+        self.filePath = filePath ?? GhostCodeConfig.commandsFilePath
         self.sections = Self.defaultSections
         loadFromDisk()
     }
