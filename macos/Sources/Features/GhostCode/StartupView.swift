@@ -2,6 +2,12 @@ import SwiftUI
 
 /// The branded splash screen shown when no project is selected.
 struct StartupView: View {
+    private let asciiLogo: String
+
+    init() {
+        asciiLogo = Self.loadRandomLogo()
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -9,11 +15,11 @@ struct StartupView: View {
             Text(asciiLogo)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.secondary.opacity(0.6))
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(.leading)
 
-            Text("GhostCode")
-                .font(.system(size: 24, weight: .light))
-                .foregroundColor(.secondary.opacity(0.8))
+            Divider()
+                .frame(width: 200)
+                .opacity(0.4)
 
             Text("Select a project to get started")
                 .font(.system(size: 13))
@@ -25,15 +31,23 @@ struct StartupView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private var asciiLogo: String {
-        """
-         ██████╗ ██╗  ██╗ ██████╗ ███████╗████████╗
-        ██╔════╝ ██║  ██║██╔═══██╗██╔════╝╚══██╔══╝
-        ██║  ███╗███████║██║   ██║███████╗   ██║
-        ██║   ██║██╔══██║██║   ██║╚════██║   ██║
-        ╚██████╔╝██║  ██║╚██████╔╝███████║   ██║
-         ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝
-        """
+    private static func loadRandomLogo() -> String {
+        guard let logosURL = Bundle.main.url(forResource: "AsciiLogos", withExtension: nil),
+              let contents = try? FileManager.default.contentsOfDirectory(
+                  at: logosURL, includingPropertiesForKeys: nil),
+              !contents.isEmpty
+        else {
+            return "GhostCode"
+        }
+
+        let asciiFiles = contents.filter { $0.pathExtension == "ascii" }
+        guard let chosen = asciiFiles.randomElement(),
+              let data = try? String(contentsOf: chosen, encoding: .utf8)
+        else {
+            return "GhostCode"
+        }
+
+        return data.trimmingCharacters(in: .newlines)
     }
 }
 

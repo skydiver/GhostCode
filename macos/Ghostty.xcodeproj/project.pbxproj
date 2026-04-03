@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1A0F2A012F9F000000AABBCC /* Sources/Features/GhostCode/AsciiLogos in Resources */ = {isa = PBXBuildFile; fileRef = 1A0F2A002F9F000000AABBCC /* Sources/Features/GhostCode/AsciiLogos */; };
 		29C15B1D2CDC3B2900520DD4 /* bat in Resources */ = {isa = PBXBuildFile; fileRef = 29C15B1C2CDC3B2000520DD4 /* bat */; };
 		55154BE02B33911F001622DC /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = 55154BDF2B33911F001622DC /* ghostty */; };
 		552964E62B34A9B400030505 /* vim in Resources */ = {isa = PBXBuildFile; fileRef = 552964E52B34A9B400030505 /* vim */; };
@@ -69,6 +70,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1A0F2A002F9F000000AABBCC /* Sources/Features/GhostCode/AsciiLogos */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Sources/Features/GhostCode/AsciiLogos; sourceTree = "<group>"; };
 		29C15B1C2CDC3B2000520DD4 /* bat */ = {isa = PBXFileReference; lastKnownFileType = folder; name = bat; path = "../zig-out/share/bat"; sourceTree = "<group>"; };
 		3B39CAA42B33949B00DABEB8 /* GhosttyReleaseLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GhosttyReleaseLocal.entitlements; sourceTree = "<group>"; };
 		55154BDF2B33911F001622DC /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = "../zig-out/share/ghostty"; sourceTree = "<group>"; };
@@ -148,15 +150,6 @@
 				Features/AppleScript/ScriptTab.swift,
 				Features/AppleScript/ScriptTerminal.swift,
 				Features/AppleScript/ScriptWindow.swift,
-				Features/GhostCode/GhostCodeConfig.swift,
-				Features/GhostCode/GhostCodeController.swift,
-				Features/GhostCode/CommandSidebar/CommandPaletteView.swift,
-				Features/GhostCode/CommandSidebar/CommandStore.swift,
-				Features/GhostCode/ProjectSidebar/GitStatusProvider.swift,
-				Features/GhostCode/ProjectSidebar/Project.swift,
-				Features/GhostCode/ProjectSidebar/ProjectListView.swift,
-				Features/GhostCode/ProjectSidebar/ProjectStore.swift,
-				Features/GhostCode/StartupView.swift,
 				Features/ClipboardConfirmation/ClipboardConfirmation.xib,
 				Features/ClipboardConfirmation/ClipboardConfirmationController.swift,
 				Features/ClipboardConfirmation/ClipboardConfirmationView.swift,
@@ -169,6 +162,15 @@
 				"Features/Custom App Icon/DockTilePlugin.swift",
 				"Features/Custom App Icon/Extensions/Notification+AppIcon.swift",
 				"Features/Custom App Icon/Extensions/UserDefaults+AppIcon.swift",
+				Features/GhostCode/CommandSidebar/CommandPaletteView.swift,
+				Features/GhostCode/CommandSidebar/CommandStore.swift,
+				Features/GhostCode/GhostCodeConfig.swift,
+				Features/GhostCode/GhostCodeController.swift,
+				Features/GhostCode/ProjectSidebar/GitStatusProvider.swift,
+				Features/GhostCode/ProjectSidebar/Project.swift,
+				Features/GhostCode/ProjectSidebar/ProjectListView.swift,
+				Features/GhostCode/ProjectSidebar/ProjectStore.swift,
+				Features/GhostCode/StartupView.swift,
 				"Features/Global Keybinds/GlobalEventTap.swift",
 				Features/QuickTerminal/QuickTerminal.xib,
 				Features/QuickTerminal/QuickTerminalController.swift,
@@ -348,6 +350,7 @@
 				8F3A9B4B2FA6B88000A18D13 /* Ghostty.sdef */,
 				A5B30538299BEAAB0047F10C /* Assets.xcassets */,
 				A553F4122E06EB1600257779 /* Ghostty.icon */,
+				1A0F2A002F9F000000AABBCC /* Sources/Features/GhostCode/AsciiLogos */,
 				A5B3053D299BEAAB0047F10C /* Ghostty.entitlements */,
 				A51BFC282B30F26D00E92F16 /* GhosttyDebug.entitlements */,
 				3B39CAA42B33949B00DABEB8 /* GhosttyReleaseLocal.entitlements */,
@@ -578,6 +581,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FC9ABA9C2D0F53F80020D4C8 /* bash-completion in Resources */,
+				1A0F2A012F9F000000AABBCC /* Sources/Features/GhostCode/AsciiLogos in Resources */,
 				A553F4142E06EB1600257779 /* Ghostty.icon in Resources */,
 				29C15B1D2CDC3B2900520DD4 /* bat in Resources */,
 				A586167C2B7703CC009BDB1D /* fish in Resources */,
