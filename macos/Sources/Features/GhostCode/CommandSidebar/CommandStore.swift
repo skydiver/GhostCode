@@ -8,11 +8,20 @@ struct CommandItem: Codable, Identifiable {
     let text: String
 }
 
+/// Layout style for a command section.
+enum SectionLayout: String, Codable {
+    case flow  // compact, wrapping chips
+    case list  // full-width stacked items
+}
+
 /// A named section of command buttons.
 struct CommandSection: Codable, Identifiable {
     var id: String { name }
     let name: String
+    let layout: SectionLayout?
     let items: [CommandItem]
+
+    var resolvedLayout: SectionLayout { layout ?? .flow }
 }
 
 /// Persistence wrapper for the command palette configuration.
@@ -117,19 +126,19 @@ final class CommandStore: ObservableObject {
     }
 
     static let defaultSections: [CommandSection] = [
-        CommandSection(name: "Slash Commands", items: [
+        CommandSection(name: "Slash Commands", layout: nil, items: [
             CommandItem(label: "/commit", text: "/commit"),
             CommandItem(label: "/review-pr", text: "/review-pr"),
             CommandItem(label: "/help", text: "/help"),
             CommandItem(label: "/clear", text: "/clear"),
         ]),
-        CommandSection(name: "Skills", items: [
+        CommandSection(name: "Skills", layout: nil, items: [
             CommandItem(label: "/brainstorm", text: "/brainstorm"),
             CommandItem(label: "/debug", text: "/debug"),
             CommandItem(label: "/tdd", text: "/tdd"),
             CommandItem(label: "/shipit", text: "/shipit"),
         ]),
-        CommandSection(name: "Snippets", items: [
+        CommandSection(name: "Snippets", layout: .list, items: [
             CommandItem(label: "Fix failing tests", text: "run the tests, find what's failing, and fix it"),
             CommandItem(label: "Explain this project", text: "read the codebase and explain the architecture"),
         ]),

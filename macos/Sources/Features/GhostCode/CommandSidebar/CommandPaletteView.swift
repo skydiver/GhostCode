@@ -83,10 +83,23 @@ struct CommandSectionView: View {
             .buttonStyle(.plain)
 
             if !isCollapsed {
-                FlowLayout(spacing: 6) {
-                    ForEach(section.items) { item in
-                        CommandButton(item: item) {
-                            onSendCommand(item.text)
+                Group {
+                    switch section.resolvedLayout {
+                    case .flow:
+                        FlowLayout(spacing: 6) {
+                            ForEach(section.items) { item in
+                                CommandButton(item: item) {
+                                    onSendCommand(item.text)
+                                }
+                            }
+                        }
+                    case .list:
+                        VStack(spacing: 6) {
+                            ForEach(section.items) { item in
+                                CommandButton(item: item, fullWidth: true) {
+                                    onSendCommand(item.text)
+                                }
+                            }
                         }
                     }
                 }
@@ -109,6 +122,7 @@ struct CommandSectionView: View {
 /// A single command button.
 struct CommandButton: View {
     let item: CommandItem
+    var fullWidth: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -129,6 +143,7 @@ struct CommandButton: View {
                         .truncationMode(.tail)
                 }
             }
+            .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Color.primary.opacity(isHovered ? 0.06 : 0))
