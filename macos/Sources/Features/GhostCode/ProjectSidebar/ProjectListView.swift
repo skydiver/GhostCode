@@ -13,6 +13,23 @@ struct ProjectListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text("Projects")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.05))
+                .overlay(alignment: .top) {
+                    Color.white.opacity(0.06)
+                        .frame(height: 1)
+                }
+                .overlay(alignment: .bottom) {
+                    Color.black.opacity(0.15)
+                        .frame(height: 1)
+                }
+
             ScrollView {
                 LazyVStack(spacing: 2) {
                     ForEach(store.projects) { project in
