@@ -158,6 +158,7 @@ struct CommandButton: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .instantTooltip(item.tooltip)
     }
 }
 

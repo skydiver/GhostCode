@@ -250,6 +250,7 @@
 				"Helpers/Extensions/View+Extension.swift",
 				Helpers/Fullscreen.swift,
 				Helpers/HostingWindow.swift,
+				Helpers/InstantTooltip.swift,
 				Helpers/KeyboardLayout.swift,
 				Helpers/LastWindowPosition.swift,
 				Helpers/MetalView.swift,

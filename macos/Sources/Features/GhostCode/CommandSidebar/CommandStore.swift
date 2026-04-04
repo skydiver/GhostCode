@@ -6,6 +6,7 @@ struct CommandItem: Codable, Identifiable {
     var id: String { label }
     let label: String
     let text: String
+    let tooltip: String?
 }
 
 /// Layout style for a command section.
@@ -145,6 +146,7 @@ final class CommandStore: ObservableObject {
         //       text             — The text sent to the terminal when clicked.
         //                          Can be a slash command (e.g. "/commit") or a free-form
         //                          prompt (e.g. "explain this function").
+        //       tooltip (optional) — Hover tooltip text shown on the button.
         "sections": [
             {
                 "name": "Slash Commands",
