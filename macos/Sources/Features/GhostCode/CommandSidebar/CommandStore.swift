@@ -108,7 +108,14 @@ final class CommandStore: ObservableObject {
     /// Opens the commands file in the system default editor.
     func openInEditor() {
         ensureFileExists()
-        NSWorkspace.shared.open(URL(fileURLWithPath: filePath))
+        let url = URL(fileURLWithPath: filePath)
+        let editor = NSWorkspace.shared.defaultApplicationURL(forExtension: url.pathExtension)
+                  ?? NSWorkspace.shared.defaultTextEditor
+        if let editor {
+            NSWorkspace.shared.open([url], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Creates the commands file with commented defaults if it doesn't exist.
