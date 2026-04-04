@@ -958,7 +958,12 @@ class AppDelegate: NSObject,
     // MARK: - IB Actions
 
     @IBAction func openConfig(_ sender: Any?) {
-        Ghostty.App.openConfig()
+        let path = GhostCodeConfig.configFilePath
+        if !FileManager.default.fileExists(atPath: path) {
+            GhostCodeConfig.ensureConfigDirectory()
+            FileManager.default.createFile(atPath: path, contents: nil)
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     @IBAction func reloadConfig(_ sender: Any?) {
