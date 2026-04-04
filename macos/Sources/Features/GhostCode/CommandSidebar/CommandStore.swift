@@ -40,7 +40,8 @@ final class CommandStore: ObservableObject {
 
     init(filePath: String? = nil) {
         self.filePath = filePath ?? GhostCodeConfig.commandsFilePath
-        self.sections = Self.defaultSections
+        self.sections = []
+        ensureFileExists()
         loadFromDisk()
         startWatching()
     }
@@ -99,48 +100,74 @@ final class CommandStore: ObservableObject {
     private func loadFromDisk() {
         guard FileManager.default.fileExists(atPath: filePath),
               let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-              let config = try? JSONDecoder().decode(CommandConfig.self, from: data)
-        else {
-            sections = Self.defaultSections
-            return
-        }
+              let config = try? JSONC.decode(CommandConfig.self, from: data)
+        else { return }
         sections = config.sections
     }
 
-    /// Opens the commands.json file in the system default editor.
+    /// Opens the commands file in the system default editor.
     func openInEditor() {
-        if !FileManager.default.fileExists(atPath: filePath) {
-            let config = CommandConfig(sections: Self.defaultSections)
-            if let data = try? JSONEncoder().encode(config) {
-                if let jsonObject = try? JSONSerialization.jsonObject(with: data),
-                   let prettyData = try? JSONSerialization.data(
-                       withJSONObject: jsonObject,
-                       options: [.prettyPrinted, .sortedKeys]
-                   ) {
-                    try? prettyData.write(to: URL(fileURLWithPath: filePath))
-                }
-            }
-            startWatching()
-        }
+        ensureFileExists()
         NSWorkspace.shared.open(URL(fileURLWithPath: filePath))
     }
 
-    static let defaultSections: [CommandSection] = [
-        CommandSection(name: "Slash Commands", layout: nil, items: [
-            CommandItem(label: "/commit", text: "/commit"),
-            CommandItem(label: "/review-pr", text: "/review-pr"),
-            CommandItem(label: "/help", text: "/help"),
-            CommandItem(label: "/clear", text: "/clear"),
-        ]),
-        CommandSection(name: "Skills", layout: nil, items: [
-            CommandItem(label: "/brainstorm", text: "/brainstorm"),
-            CommandItem(label: "/debug", text: "/debug"),
-            CommandItem(label: "/tdd", text: "/tdd"),
-            CommandItem(label: "/shipit", text: "/shipit"),
-        ]),
-        CommandSection(name: "Snippets", layout: .list, items: [
-            CommandItem(label: "Fix failing tests", text: "run the tests, find what's failing, and fix it"),
-            CommandItem(label: "Explain this project", text: "read the codebase and explain the architecture"),
-        ]),
-    ]
+    /// Creates the commands file with commented defaults if it doesn't exist.
+    private func ensureFileExists() {
+        guard !FileManager.default.fileExists(atPath: filePath) else { return }
+        try? Self.defaultJSONC.data(using: .utf8)?
+            .write(to: URL(fileURLWithPath: filePath))
+        startWatching()
+    }
+
+    // MARK: - Default JSONC Template
+
+    private static let defaultJSONC = """
+    {
+        // GhostCode Command Palette Configuration
+        //
+        // This file defines the buttons shown in the command palette sidebar.
+        // Changes are picked up automatically — no need to restart the app.
+        //
+        // Structure:
+        //   sections[]           — Array of section groups displayed top to bottom.
+        //     name               — Section heading shown in the sidebar.
+        //     layout (optional)  — "flow" (default): compact, wrapping chip buttons.
+        //                          "list": full-width, stacked rows (better for longer labels).
+        //     items[]            — Array of command buttons within the section.
+        //       label            — Button text shown in the palette.
+        //       text             — The text sent to the terminal when clicked.
+        //                          Can be a slash command (e.g. "/commit") or a free-form
+        //                          prompt (e.g. "explain this function").
+        "sections": [
+            {
+                "name": "Slash Commands",
+                "items": [
+                    { "label": "/commit", "text": "/commit" },
+                    { "label": "/review-pr", "text": "/review-pr" },
+                    { "label": "/help", "text": "/help" },
+                    { "label": "/clear", "text": "/clear" }
+                ]
+            },
+            {
+                "name": "Skills",
+                "items": [
+                    { "label": "/brainstorm", "text": "/brainstorm" },
+                    { "label": "/debug", "text": "/debug" },
+                    { "label": "/tdd", "text": "/tdd" },
+                    { "label": "/shipit", "text": "/shipit" }
+                ]
+            },
+            {
+                // Use "list" layout for items with longer labels or descriptions.
+                "name": "Snippets",
+                "layout": "list",
+                "items": [
+                    { "label": "Fix failing tests", "text": "run the tests, find what's failing, and fix it" },
+                    { "label": "Explain this project", "text": "read the codebase and explain the architecture" }
+                ]
+            }
+        ]
+    }
+    """
+
 }

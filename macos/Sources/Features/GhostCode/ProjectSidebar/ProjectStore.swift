@@ -97,13 +97,13 @@ final class ProjectStore: ObservableObject {
         else { return }
 
         // Try new format: [ProjectEntry]
-        if let entries = try? JSONDecoder().decode([ProjectEntry].self, from: data) {
+        if let entries = try? JSONC.decode([ProjectEntry].self, from: data) {
             projects = entries.map { Project(path: $0.path, binary: $0.binary) }
             return
         }
 
         // Fall back to legacy format: [String]
-        if let paths = try? JSONDecoder().decode([String].self, from: data) {
+        if let paths = try? JSONC.decode([String].self, from: data) {
             projects = paths.map { Project(path: $0) }
         }
     }

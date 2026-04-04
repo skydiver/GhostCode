@@ -29,18 +29,18 @@ final class CommandStoreTests: XCTestCase {
         XCTAssertEqual(store.sections[0].items[0].text, "/commit")
     }
 
-    func testMissingFileReturnsDefaults() {
-        let store = CommandStore(filePath: "/nonexistent/commands.json")
-        XCTAssertFalse(store.sections.isEmpty, "Should provide default sections")
+    func testMissingFileReturnsEmpty() {
+        let store = CommandStore(filePath: "/nonexistent/commands.jsonc")
+        XCTAssertTrue(store.sections.isEmpty, "Should be empty when file cannot be created")
     }
 
-    func testMalformedJSONReturnsDefaults() throws {
+    func testMalformedJSONReturnsEmpty() throws {
         let tempFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("test-commands-\(UUID().uuidString).json")
+            .appendingPathComponent("test-commands-\(UUID().uuidString).jsonc")
         try "{ invalid json".data(using: .utf8)!.write(to: tempFile)
         defer { try? FileManager.default.removeItem(at: tempFile) }
 
         let store = CommandStore(filePath: tempFile.path)
-        XCTAssertFalse(store.sections.isEmpty, "Should fallback to defaults")
+        XCTAssertTrue(store.sections.isEmpty, "Should be empty on malformed JSON")
     }
 }

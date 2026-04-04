@@ -58,11 +58,21 @@ enum GhostCodeConfig {
     }
 
     static var projectsFilePath: String {
-        "\(configDirectory)/projects.json"
+        resolveConfigFile("projects")
     }
 
     static var commandsFilePath: String {
-        "\(configDirectory)/commands.json"
+        resolveConfigFile("commands")
+    }
+
+    /// Returns the path for a config file, preferring `.jsonc` over `.json`.
+    /// Defaults to `.jsonc` when neither exists (for new file creation).
+    private static func resolveConfigFile(_ name: String) -> String {
+        let jsoncPath = "\(configDirectory)/\(name).jsonc"
+        let jsonPath = "\(configDirectory)/\(name).json"
+        if FileManager.default.fileExists(atPath: jsoncPath) { return jsoncPath }
+        if FileManager.default.fileExists(atPath: jsonPath) { return jsonPath }
+        return jsoncPath
     }
 
     static var appConfigFilePath: String {
