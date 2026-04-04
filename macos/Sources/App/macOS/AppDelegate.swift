@@ -418,8 +418,8 @@ class AppDelegate: NSObject,
         // We have some visible window. Show an app-wide modal to confirm quitting.
         let alert = NSAlert()
         alert.messageText = "Quit GhostCode?"
-        alert.informativeText = "All terminal sessions will be terminated."
-        alert.addButton(withTitle: "Close GhostCode")
+        alert.informativeText = "All running sessions will be stopped."
+        alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
         switch alert.runModal() {

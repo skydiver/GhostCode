@@ -912,7 +912,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         let alert = NSAlert()
         alert.messageText = "Close All Windows?"
-        alert.informativeText = "All terminal sessions will be terminated."
+        alert.informativeText = "All running sessions will be stopped."
         alert.addButton(withTitle: "Close All Windows")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
@@ -1335,7 +1335,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // attached to the window that needs confirmation.
         confirmController.confirmClose(
             messageText: "Close Window?",
-            informativeText: "All terminal sessions in this window will be terminated.",
+            informativeText: "All running sessions in this window will be stopped.",
         ) {
             self.closeWindowImmediately()
         }
