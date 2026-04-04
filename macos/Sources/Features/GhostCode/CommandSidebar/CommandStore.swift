@@ -21,20 +21,71 @@ struct CommandConfig: Codable {
 }
 
 /// Loads and manages command palette sections from JSON.
+/// Watches the backing file for changes and reloads automatically.
 final class CommandStore: ObservableObject {
     @Published private(set) var sections: [CommandSection]
 
     private let filePath: String
+    private var fileWatcher: DispatchSourceFileSystemObject?
+    private var watchedFD: Int32 = -1
 
     init(filePath: String? = nil) {
         self.filePath = filePath ?? GhostCodeConfig.commandsFilePath
         self.sections = Self.defaultSections
         loadFromDisk()
+        startWatching()
+    }
+
+    deinit {
+        stopWatching()
     }
 
     func reload() {
         loadFromDisk()
     }
+
+    // MARK: - File Watching
+
+    private func startWatching() {
+        stopWatching()
+
+        let fd = open(filePath, O_EVTONLY)
+        guard fd >= 0 else { return }
+        watchedFD = fd
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename],
+            queue: .main
+        )
+
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let flags = source.data
+            self.loadFromDisk()
+
+            // Atomic saves delete/rename the original file.
+            // Re-establish the watch on the new file.
+            if flags.contains(.delete) || flags.contains(.rename) {
+                self.startWatching()
+            }
+        }
+
+        source.setCancelHandler {
+            close(fd)
+        }
+
+        source.resume()
+        fileWatcher = source
+    }
+
+    private func stopWatching() {
+        fileWatcher?.cancel()
+        fileWatcher = nil
+        watchedFD = -1
+    }
+
+    // MARK: - Persistence
 
     private func loadFromDisk() {
         guard FileManager.default.fileExists(atPath: filePath),
@@ -60,6 +111,7 @@ final class CommandStore: ObservableObject {
                     try? prettyData.write(to: URL(fileURLWithPath: filePath))
                 }
             }
+            startWatching()
         }
         NSWorkspace.shared.open(URL(fileURLWithPath: filePath))
     }
