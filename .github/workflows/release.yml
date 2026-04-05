@@ -44,7 +44,7 @@ jobs:
 
       # ── Zig ────────────────────────────────────────────────
       - name: Install Zig
-        uses: mlugg/setup-zig@7a07371fee8af058a0ffe862aeee09a0f0a498b3 # v2.0.1
+        uses: mlugg/setup-zig@7dccf5e6d09267c55f815f2db29495f30ba2ebca # v2.0.1
         with:
           version: 0.15.2
 
