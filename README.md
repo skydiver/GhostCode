@@ -30,6 +30,15 @@ Rather than being a general-purpose terminal emulator, GhostCode is opinionated:
 
 GhostCode is **macOS only**, built entirely with SwiftUI and AppKit.
 
+## Screenshots
+
+|                                                          |                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| ![Splash screen](.assets/screenshot-splash.png)          | ![Project landing page](.assets/screenshot-landing.png) |
+| Splash screen with project list and command palette      | Project landing page with binary picker                 |
+| ![Claude Code terminal](.assets/screenshot-terminal.png) | ![OpenCode terminal](.assets/screenshot-opencode.png)   |
+| Active Claude Code session                               | OpenCode session with command palette                   |
+
 ## Features
 
 ### Project Management
