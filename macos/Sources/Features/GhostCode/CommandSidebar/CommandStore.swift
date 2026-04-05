@@ -7,6 +7,10 @@ struct CommandItem: Codable, Identifiable {
     let label: String
     let text: String
     let tooltip: String?
+    let autoSend: Bool?
+
+    /// Whether to send Enter after the text. Defaults to false.
+    var shouldAutoSend: Bool { autoSend ?? false }
 }
 
 /// Layout style for a command section.
@@ -147,6 +151,8 @@ final class CommandStore: ObservableObject {
         //                          Can be a slash command (e.g. "/commit") or a free-form
         //                          prompt (e.g. "explain this function").
         //       tooltip (optional) — Hover tooltip text shown on the button.
+        //       autoSend (optional) — Whether to press Enter after sending. Defaults to false.
+        //                          Set to true for commands that should execute immediately.
         "sections": [
             {
                 "name": "Slash Commands",

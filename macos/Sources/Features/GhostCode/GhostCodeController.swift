@@ -109,8 +109,8 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             rootView: GhostCodeCommandPaletteView(
                 store: commandStore,
                 state: commandPaletteState,
-                onSendCommand: { [weak self] text in
-                    self?.sendTextToActiveTerminal(text)
+                onSendCommand: { [weak self] text, sendEnter in
+                    self?.sendTextToActiveTerminal(text, sendEnter: sendEnter)
                 }
             )
         )

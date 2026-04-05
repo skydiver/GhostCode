@@ -4,7 +4,7 @@ import SwiftUI
 struct GhostCodeCommandPaletteView: View {
     @ObservedObject var store: CommandStore
     @ObservedObject var state: CommandPaletteState
-    let onSendCommand: (String) -> Void
+    let onSendCommand: (String, Bool) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,7 +51,7 @@ struct GhostCodeCommandPaletteView: View {
 /// A single section of command buttons.
 struct CommandSectionView: View {
     let section: CommandSection
-    let onSendCommand: (String) -> Void
+    let onSendCommand: (String, Bool) -> Void
 
     @State private var isCollapsed = false
 
@@ -89,7 +89,7 @@ struct CommandSectionView: View {
                         FlowLayout(spacing: 6) {
                             ForEach(section.items) { item in
                                 CommandButton(item: item) {
-                                    onSendCommand(item.text)
+                                    onSendCommand(item.text, item.shouldAutoSend)
                                 }
                             }
                         }
@@ -97,7 +97,7 @@ struct CommandSectionView: View {
                         VStack(spacing: 6) {
                             ForEach(section.items) { item in
                                 CommandButton(item: item, fullWidth: true) {
-                                    onSendCommand(item.text)
+                                    onSendCommand(item.text, item.shouldAutoSend)
                                 }
                             }
                         }
