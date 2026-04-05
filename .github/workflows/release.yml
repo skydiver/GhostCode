@@ -49,7 +49,7 @@ jobs:
           echo "$PWD/zig-aarch64-macos-0.15.2" >> $GITHUB_PATH
 
       - name: Build XCFramework
-        run: zig build -Demit-xcframework -Doptimize=ReleaseFast
+        run: zig build -Demit-xcframework -Demit-macos-app=false -Doptimize=ReleaseFast
 
       # ── Keychain & Signing ─────────────────────────────────
       - name: Import signing certificate
