@@ -4,7 +4,7 @@ struct AboutView: View {
     @Environment(\.openURL) var openURL
 
     private let githubURL = URL(string: "https://github.com/skydiver/GhostCode")
-    private let ghosttyURL = URL(string: "https://ghostty.org")
+    private let ghosttyURL = URL(string: "https://github.com/ghostty-org/ghostty")
 
     /// Read the commit from the bundle.
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }

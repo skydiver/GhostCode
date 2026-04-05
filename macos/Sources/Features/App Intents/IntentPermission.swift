@@ -44,7 +44,7 @@ func requestIntentPermission() async -> Bool {
             }
 
             PermissionRequest.show(
-                "com.mitchellh.ghostty.shortcutsPermission",
+                "com.flydev.ghostcode.shortcutsPermission",
                 message: "Allow Shortcuts to interact with GhostCode?",
                 allowDuration: .forever,
                 rememberDuration: nil,

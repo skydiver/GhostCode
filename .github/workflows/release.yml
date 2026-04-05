@@ -21,6 +21,7 @@ jobs:
       contents: write
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+      VERSION: ${{ inputs.version }}
 
     steps:
       # ── Tag ────────────────────────────────────────────────
@@ -96,7 +97,7 @@ jobs:
             -scheme Ghostty \
             -configuration Release \
             -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
-            MARKETING_VERSION=${{ inputs.version }} \
+            MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGN_STYLE=Manual \
             "CODE_SIGN_IDENTITY=Developer ID Application" \
@@ -135,15 +136,15 @@ jobs:
         run: |
           ditto -c -k --keepParent \
             "$RUNNER_TEMP/export/GhostCode.app" \
-            "$RUNNER_TEMP/GhostCode-${{ inputs.version }}-universal.zip"
+            "$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ inputs.version }}" \
-            "$RUNNER_TEMP/GhostCode-${{ inputs.version }}-universal.zip" \
-            --title "GhostCode v${{ inputs.version }}" \
+          gh release create "v${VERSION}" \
+            "$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip" \
+            --title "GhostCode v${VERSION}" \
             --generate-notes \
             --latest
 
