@@ -238,18 +238,10 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
             else => return err,
         };
         if (vsn.tag) |tag| {
-            // Tip releases behave just like any other pre-release so we skip.
+            // GhostCode: skip tag/version validation. GhostCode uses its own
+            // versioning (via MARKETING_VERSION) independent of the upstream
+            // Ghostty engine version in build.zig.zon.
             if (!std.mem.eql(u8, tag, "tip")) {
-                const expected = b.fmt("v{d}.{d}.{d}", .{
-                    app_version.major,
-                    app_version.minor,
-                    app_version.patch,
-                });
-
-                if (!std.mem.eql(u8, tag, expected)) {
-                    @panic("tagged releases must be in vX.Y.Z format matching build.zig");
-                }
-
                 break :version .{
                     .major = app_version.major,
                     .minor = app_version.minor,
