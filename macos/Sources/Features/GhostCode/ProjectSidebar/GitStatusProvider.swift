@@ -11,15 +11,21 @@ final class GitStatusProvider {
             ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
             in: path
         )
+        async let remoteResult = runGit(["remote", "get-url", "origin"], in: path)
 
         let statusOutput = await statusResult
         let aheadBehind = await aheadBehindResult
+        let remote = await remoteResult
 
-        return parseGitStatus(statusOutput: statusOutput, aheadBehind: aheadBehind)
+        return parseGitStatus(
+            statusOutput: statusOutput,
+            aheadBehind: aheadBehind,
+            remoteURL: remote.isEmpty ? nil : remote
+        )
     }
 
     /// Parses the combined output of git status and rev-list into a GitStatus.
-    static func parseGitStatus(statusOutput: String, aheadBehind: String) -> Project.GitStatus? {
+    static func parseGitStatus(statusOutput: String, aheadBehind: String, remoteURL: String? = nil) -> Project.GitStatus? {
         let lines = statusOutput.components(separatedBy: "\n").filter { !$0.isEmpty }
         guard let branchLine = lines.first, branchLine.hasPrefix("##") else {
             return nil
@@ -50,7 +56,8 @@ final class GitStatusProvider {
             isDirty: isDirty,
             changedFileCount: changedFiles,
             ahead: ahead,
-            behind: behind
+            behind: behind,
+            remoteURL: remoteURL
         )
     }
 

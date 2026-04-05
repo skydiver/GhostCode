@@ -52,6 +52,11 @@ struct ProjectListView: View {
                                         forType: .string
                                     )
                                 }
+                                if let gitHubURL = project.gitStatus?.gitHubURL {
+                                    Button("Open on GitHub") {
+                                        NSWorkspace.shared.open(gitHubURL)
+                                    }
+                                }
                                 Divider()
                                 openWithMenuContent(for: project)
                                 Divider()

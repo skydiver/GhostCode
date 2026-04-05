@@ -21,6 +21,7 @@ struct Project: Identifiable, Equatable {
         let changedFileCount: Int
         let ahead: Int
         let behind: Int
+        let remoteURL: String?
 
         var displayText: String {
             var parts: [String] = []
@@ -31,6 +32,28 @@ struct Project: Identifiable, Equatable {
             if behind > 0 { parts.append("\u{2193}\(behind)") }
             if parts.isEmpty { return "\u{2713} clean" }
             return parts.joined(separator: " ")
+        }
+
+        /// The HTTPS URL for viewing the repo on GitHub, or nil if not a GitHub remote.
+        var gitHubURL: URL? {
+            guard let remote = remoteURL else { return nil }
+            let cleaned = remote.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // SSH: git@github.com:owner/repo.git
+            if cleaned.hasPrefix("git@github.com:") {
+                let path = cleaned
+                    .replacingOccurrences(of: "git@github.com:", with: "")
+                    .replacingOccurrences(of: ".git", with: "")
+                return URL(string: "https://github.com/\(path)")
+            }
+
+            // HTTPS: https://github.com/owner/repo.git
+            if cleaned.contains("github.com") {
+                let path = cleaned.replacingOccurrences(of: ".git", with: "")
+                return URL(string: path)
+            }
+
+            return nil
         }
     }
 
