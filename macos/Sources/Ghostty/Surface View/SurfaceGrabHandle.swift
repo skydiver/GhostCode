@@ -10,6 +10,7 @@ extension Ghostty {
         private static let hoverHeightFactor: CGFloat = 0.2
 
         @ObservedObject var surfaceView: SurfaceView
+        @Environment(\.surfaceGrabHandleEnabled) private var isEnabled
 
         @State private var isHovering: Bool = false
         @State private var isDragging: Bool = false
@@ -37,7 +38,7 @@ extension Ghostty {
         }
 
         var body: some View {
-            if handleVisible {
+            if isEnabled && handleVisible {
                 ZStack {
                     SurfaceDragSource(
                         surfaceView: surfaceView,

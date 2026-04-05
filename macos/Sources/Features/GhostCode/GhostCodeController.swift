@@ -281,6 +281,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                 viewModel: controller,
                 delegate: controller
             )
+            .environment(\.surfaceGrabHandleEnabled, false)
             let hostingView = NSHostingView(rootView: terminalView)
             hostingView.sizingOptions = []
             hostingView.translatesAutoresizingMaskIntoConstraints = false
