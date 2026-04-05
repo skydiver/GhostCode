@@ -44,9 +44,9 @@ jobs:
 
       # ── Zig ────────────────────────────────────────────────
       - name: Install Zig
-        uses: mlugg/setup-zig@7dccf5e6d09267c55f815f2db29495f30ba2ebca # v2.0.1
-        with:
-          version: 0.15.2
+        run: |
+          curl -L https://ziglang.org/download/0.15.2/zig-aarch64-macos-0.15.2.tar.xz | tar xJ
+          echo "$PWD/zig-aarch64-macos-0.15.2" >> $GITHUB_PATH
 
       - name: Build XCFramework
         run: zig build -Demit-xcframework -Doptimize=ReleaseFast
