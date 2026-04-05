@@ -53,16 +53,7 @@ struct ProjectListView: View {
                                     )
                                 }
                                 Divider()
-                                Menu("Open with") {
-                                    Button("Visual Studio Code") {
-                                        openWith("com.microsoft.VSCode", path: project.path)
-                                    }
-                                    if project.gitStatus != nil {
-                                        Button("Tower") {
-                                            openWith("com.fournova.Tower3", path: project.path)
-                                        }
-                                    }
-                                }
+                                openWithMenuContent(for: project)
                                 Divider()
                                 Button("Remove Project", role: .destructive) {
                                     store.removeProject(path: project.path)
@@ -118,6 +109,37 @@ struct ProjectListView: View {
     private func refreshAllGitStatus() {
         for project in store.projects {
             refreshGitStatus(for: project.path)
+        }
+    }
+
+    private func isAppInstalled(_ bundleID: String) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+
+    @ViewBuilder
+    private func openWithMenuContent(for project: Project) -> some View {
+        let hasGhostty = isAppInstalled("com.mitchellh.ghostty")
+        let hasVSCode = isAppInstalled("com.microsoft.VSCode")
+        let hasTower = project.gitStatus != nil && isAppInstalled("com.fournova.Tower3")
+
+        if hasGhostty || hasVSCode || hasTower {
+            Menu("Open in") {
+                if hasGhostty {
+                    Button("Ghostty") {
+                        openWith("com.mitchellh.ghostty", path: project.path)
+                    }
+                }
+                if hasVSCode {
+                    Button("Visual Studio Code") {
+                        openWith("com.microsoft.VSCode", path: project.path)
+                    }
+                }
+                if hasTower {
+                    Button("Tower") {
+                        openWith("com.fournova.Tower3", path: project.path)
+                    }
+                }
+            }
         }
     }
 
