@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.8.0)"
+        required: true
+        type: string
+      create_tag:
+        description: "Create new tag on current commit (uncheck to use existing tag)"
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    name: Build, Sign, Notarize & Release
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+    steps:
+      # ── Tag ────────────────────────────────────────────────
+      - name: Create tag
+        if: inputs.create_tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/v${{ inputs.version }}`,
+              sha: context.sha,
+            });
+
+      # ── Checkout ───────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: v${{ inputs.version }}
+
+      # ── Zig ────────────────────────────────────────────────
+      - name: Install Zig
+        uses: mlugg/setup-zig@7a07371fee8af058a0ffe862aeee09a0f0a498b3 # v2.0.1
+        with:
+          version: 0.15.2
+
+      - name: Build XCFramework
+        run: zig build -Demit-xcframework -Doptimize=ReleaseFast
+
+      # ── Keychain & Signing ─────────────────────────────────
+      - name: Import signing certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+
+          echo -n "$P12_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          rm -f "$CERTIFICATE_PATH"
+
+      - name: Write App Store Connect API key
+        env:
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          mkdir -p ~/private_keys
+          echo -n "$API_KEY_P8" | base64 --decode -o ~/private_keys/AuthKey_${API_KEY_ID}.p8
+
+      # ── Build ──────────────────────────────────────────────
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project macos/Ghostty.xcodeproj \
+            -scheme Ghostty \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
+            MARKETING_VERSION=${{ inputs.version }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGN_STYLE=Manual \
+            "CODE_SIGN_IDENTITY=Developer ID Application" \
+            DEVELOPMENT_TEAM=F548563X8C
+
+      - name: Export
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist macos/ExportOptions.plist
+
+      # ── Notarize ───────────────────────────────────────────
+      - name: Create ZIP for notarization
+        run: |
+          ditto -c -k --keepParent \
+            "$RUNNER_TEMP/export/GhostCode.app" \
+            "$RUNNER_TEMP/GhostCode-notarize.zip"
+
+      - name: Notarize
+        env:
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          xcrun notarytool submit "$RUNNER_TEMP/GhostCode-notarize.zip" \
+            --key ~/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER_ID" \
+            --wait
+
+      - name: Staple
+        run: xcrun stapler staple "$RUNNER_TEMP/export/GhostCode.app"
+
+      # ── Package & Release ──────────────────────────────────
+      - name: Create release ZIP
+        run: |
+          ditto -c -k --keepParent \
+            "$RUNNER_TEMP/export/GhostCode.app" \
+            "$RUNNER_TEMP/GhostCode-${{ inputs.version }}-universal.zip"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            "$RUNNER_TEMP/GhostCode-${{ inputs.version }}-universal.zip" \
+            --title "GhostCode v${{ inputs.version }}" \
+            --generate-notes \
+            --latest
+
+      # ── Cleanup ────────────────────────────────────────────
+      - name: Cleanup keychain
+        if: always()
+        run: security delete-keychain $RUNNER_TEMP/build.keychain-db
