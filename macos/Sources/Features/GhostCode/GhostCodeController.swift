@@ -337,14 +337,64 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     // MARK: - Command Execution
 
-    func sendTextToActiveTerminal(_ text: String) {
+    /// The active binary for the current project.
+    private var activeBinary: SupportedBinary {
+        guard let path = projectStore.selectedPath,
+              let project = projectStore.project(forPath: path) else {
+            return GhostCodeConfig.loadAppConfig().defaultBinary
+        }
+        return project.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
+    }
+
+    func sendTextToActiveTerminal(_ text: String, sendEnter: Bool = true) {
+        if sendEnter {
+            switch activeBinary.inputStrategy {
+            case .rawCR:
+                sendRawText(text, suffix: "\\r")
+            case .pasteAndKeyEvent:
+                sendPastedTextWithKeyEvent(text)
+            }
+        } else {
+            sendRawText(text, suffix: nil)
+        }
+    }
+
+    /// Send text (and optional Enter) as raw bytes directly to the PTY.
+    /// Bypasses bracketed paste entirely.
+    private func sendRawText(_ text: String, suffix: String?) {
         guard let surfaceView = activeTerminalController?.focusedSurface,
-              let surface = surfaceView.surface else { return }
-        let fullText = text
-        let len = fullText.utf8CString.count
+              let surfaceModel = surfaceView.surfaceModel else { return }
+
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        let payload: String
+        if let suffix {
+            payload = "text:\(escaped)\(suffix)"
+        } else {
+            payload = "text:\(escaped)"
+        }
+        _ = surfaceModel.perform(action: payload)
+    }
+
+    /// Paste text via bracketed paste, then send a key event for Enter.
+    /// Used for apps that need proper key encoding (e.g. Kitty protocol).
+    private func sendPastedTextWithKeyEvent(_ text: String) {
+        guard let surfaceView = activeTerminalController?.focusedSurface,
+              let surface = surfaceView.surface,
+              let surfaceModel = surfaceView.surfaceModel else { return }
+
+        let len = text.utf8CString.count
         guard len > 0 else { return }
-        fullText.withCString { ptr in
+        text.withCString { ptr in
             ghostty_surface_text(surface, ptr, UInt(len - 1))
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            surfaceModel.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .press))
+            surfaceModel.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .release))
         }
     }
 

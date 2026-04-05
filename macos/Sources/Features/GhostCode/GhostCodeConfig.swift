@@ -43,6 +43,25 @@ enum SupportedBinary: String, Codable, CaseIterable, Identifiable {
         case .codex, .opencode: return false
         }
     }
+
+    /// How text and Enter are delivered to the terminal for this binary.
+    enum InputStrategy {
+        /// Send text + `\r` as raw bytes via the `text:` binding action.
+        /// No bracketed paste. Works for Claude Code and regular shells.
+        case rawCR
+
+        /// Paste text via `ghostty_surface_text` (bracketed paste), then
+        /// send Enter as a key event after a short delay.
+        case pasteAndKeyEvent
+    }
+
+    var inputStrategy: InputStrategy {
+        switch self {
+        case .claude:   return .rawCR
+        case .codex:    return .pasteAndKeyEvent
+        case .opencode: return .pasteAndKeyEvent
+        }
+    }
 }
 
 /// Manages GhostCode-specific configuration paths and layered config loading.
