@@ -10,6 +10,8 @@
   ·
   <a href="#features">Features</a>
   ·
+  <a href="#install">Install</a>
+  ·
   <a href="#building">Building</a>
   ·
   <a href="#license-and-attribution">License</a>
@@ -29,6 +31,18 @@ GhostCode is a macOS-native application that wraps [Ghostty's](https://ghostty.o
 Rather than being a general-purpose terminal emulator, GhostCode is opinionated: it launches AI CLI tools ([Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), or [OpenCode](https://github.com/opencode-ai/opencode)) inside Ghostty-powered terminals, with project-aware context and quick-access commands alongside them.
 
 GhostCode is **macOS only**, built entirely with SwiftUI and AppKit.
+
+## Install
+
+Download the latest universal binary from the [Releases](https://github.com/skydiver/GhostCode/releases) page.
+
+**The app is signed and notarized by Apple** — you can run it immediately without Gatekeeper warnings.
+
+1. Download `GhostCode-<version>-universal.zip`
+2. Unzip and drag `GhostCode.app` to your Applications folder
+3. Launch GhostCode
+
+Requires macOS 13.0 or later. Runs natively on both Apple Silicon and Intel Macs.
 
 ## Screenshots
 
