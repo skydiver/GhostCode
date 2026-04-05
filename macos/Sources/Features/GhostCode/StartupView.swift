@@ -14,7 +14,7 @@ struct StartupView: View {
 
             Text(asciiLogo)
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(.secondary.opacity(0.6))
+                .foregroundStyle(.secondary.opacity(0.6))
                 .multilineTextAlignment(.leading)
 
             Divider()
@@ -23,7 +23,7 @@ struct StartupView: View {
 
             Text("Select a project to get started")
                 .font(.system(size: 13))
-                .foregroundColor(.secondary.opacity(0.5))
+                .foregroundStyle(.secondary.opacity(0.5))
 
             Spacer()
         }
@@ -83,11 +83,11 @@ struct ProjectLandingView: View {
 
             Image(systemName: "folder.fill")
                 .font(.system(size: 40))
-                .foregroundColor(.secondary.opacity(0.3))
+                .foregroundStyle(.secondary.opacity(0.3))
 
             Text(project.name)
                 .font(.system(size: 22, weight: .medium))
-                .foregroundColor(.primary.opacity(0.8))
+                .foregroundStyle(.primary.opacity(0.8))
 
             Picker(selection: $selectedBinary) {
                 ForEach(SupportedBinary.allCases) { binary in
@@ -166,7 +166,7 @@ private struct ProjectInfoSection: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(Color.primary.opacity(0.03))
-        .cornerRadius(8)
+        .clipShape(.rect(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
@@ -204,12 +204,12 @@ private struct InfoRow: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundColor(.secondary.opacity(0.6))
+                .foregroundStyle(.secondary.opacity(0.6))
                 .frame(width: 16, alignment: .center)
 
             Text(text)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -280,13 +280,13 @@ private struct LandingButton: View {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
             }
-            .foregroundColor(style == .primary ? .white : .primary)
+            .foregroundStyle(style == .primary ? .white : .primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(style == .primary
                 ? Color.accentColor
                 : Color.primary.opacity(isHovered ? 0.08 : 0.05))
-            .cornerRadius(8)
+            .clipShape(.rect(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(style == .primary

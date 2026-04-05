@@ -15,7 +15,7 @@ struct ProjectListView: View {
         VStack(spacing: 0) {
             Text("Projects")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -80,7 +80,7 @@ struct ProjectListView: View {
                     Text("Add Project")
                 }
                 .font(.system(size: 13))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -157,7 +157,7 @@ struct ProjectRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(project.name)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
@@ -165,18 +165,18 @@ struct ProjectRow: View {
                     HStack(spacing: 6) {
                         Text(git.branch)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
 
                         Text(git.displayText)
                             .font(.system(size: 11))
-                            .foregroundColor(statusColor(git))
+                            .foregroundStyle(statusColor(git))
                     }
                 } else {
                     Text("no repo")
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary.opacity(0.6))
+                        .foregroundStyle(.secondary.opacity(0.6))
                 }
             }
 

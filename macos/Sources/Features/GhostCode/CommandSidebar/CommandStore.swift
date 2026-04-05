@@ -3,7 +3,7 @@ import AppKit
 
 /// A single command button in the palette.
 struct CommandItem: Codable, Identifiable {
-    var id: String { label }
+    var id: String { "\(label)|\(text)" }
     let label: String
     let text: String
     let tooltip: String?

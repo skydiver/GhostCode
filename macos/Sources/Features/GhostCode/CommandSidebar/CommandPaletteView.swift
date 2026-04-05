@@ -28,7 +28,7 @@ struct GhostCodeCommandPaletteView: View {
                     Text("Edit Commands")
                 }
                 .font(.system(size: 12))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -65,13 +65,13 @@ struct CommandSectionView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isCollapsed ? 0 : 90))
                         .frame(width: 12)
 
                     Text(section.name.uppercased())
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .kerning(0.5)
 
                     Spacer()
@@ -110,7 +110,7 @@ struct CommandSectionView: View {
             }
         }
         .background(Color.primary.opacity(0.04))
-        .cornerRadius(6)
+        .clipShape(.rect(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
@@ -133,12 +133,12 @@ struct CommandButton: View {
                 Text(item.label)
                     .font(.system(size: 13, weight: .medium,
                            design: item.label.hasPrefix("/") ? .monospaced : .default))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
 
                 if !item.label.hasPrefix("/") && item.text != item.label {
                     Text(item.text)
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -147,7 +147,7 @@ struct CommandButton: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Color.primary.opacity(isHovered ? 0.06 : 0))
-            .cornerRadius(6)
+            .clipShape(.rect(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.primary.opacity(isHovered ? 0.25 : 0.1), lineWidth: 1)
