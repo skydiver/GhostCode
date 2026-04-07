@@ -108,7 +108,12 @@ private class TabTitleProvider: ObservableObject {
 
     init(tab: TabItem) {
         let fallback = tab.title
-        if let surface = tab.controller.focusedSurface {
+
+        // AI tabs always show the binary's formal name (e.g. "Claude Code").
+        // Shell tabs show the live terminal title.
+        if tab.kind == .ai {
+            displayTitle = fallback
+        } else if let surface = tab.controller.focusedSurface {
             displayTitle = surface.title.isEmpty ? fallback : surface.title
             cancellable = surface.$title
                 .map { $0.isEmpty ? fallback : $0 }
