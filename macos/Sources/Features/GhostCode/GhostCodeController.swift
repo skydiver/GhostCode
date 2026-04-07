@@ -475,20 +475,33 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
             // Cancel any pending focus transfer from a previous call
             // (e.g. rapid Cmd+T presses) so only the latest one runs.
-            // A small delay ensures the Metal surface completes its layout pass.
             self.pendingFocusWork?.cancel()
             let focusWork = DispatchWorkItem { [weak self] in
-                guard let self,
-                      let surface = self.activeTerminalController?.focusedSurface,
-                      let window = self.window else { return }
-                window.makeFirstResponder(surface)
+                self?.transferFocusToActiveSurface(retries: 5)
             }
             self.pendingFocusWork = focusWork
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: focusWork)
+            DispatchQueue.main.async(execute: focusWork)
         }
     }
 
     // MARK: - Tab Management
+
+    /// Attempts to make the active terminal surface the first responder.
+    /// Retries with increasing delay if the surface isn't ready yet
+    /// (e.g. Metal view hasn't completed its layout pass).
+    private func transferFocusToActiveSurface(retries: Int) {
+        guard let surface = activeTerminalController?.focusedSurface,
+              let window = window else { return }
+
+        // Surface must be in the view hierarchy with valid bounds
+        if surface.window != nil, surface.bounds.width > 0 {
+            window.makeFirstResponder(surface)
+        } else if retries > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.transferFocusToActiveSurface(retries: retries - 1)
+            }
+        }
+    }
 
     private func selectTab(at index: Int, projectPath: String) {
         guard let tabGroup = projectTabs[projectPath] else { return }
