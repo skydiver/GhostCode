@@ -36,6 +36,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // Combine cancellables for per-tab exit polling, keyed by TabItem.id
     private var exitCancellables: [UUID: AnyCancellable] = [:]
 
+    // Coalesces rapid focus transfers (e.g. pressing Cmd+T quickly)
+    private var pendingFocusWork: DispatchWorkItem?
+
     // The currently active terminal controller, resolved through the tab group
     var activeTerminalController: TerminalController? {
         guard let path = activeProjectPath else { return nil }
@@ -141,19 +144,161 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         window?.contentViewController = splitViewController
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.modifierFlags.contains([.command, .shift]) else {
-                return event
+            guard let self else { return event }
+
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            // Cmd+Shift shortcuts
+            if flags == [.command, .shift] {
+                // Use keyCode for bracket keys since charactersIgnoringModifiers
+                // preserves Shift (Shift+[ = '{', not '[')
+                let keyCode = event.keyCode
+
+                switch keyCode {
+                case 33: // [ key — previous tab (wraps around)
+                    if let projectPath = self.activeProjectPath,
+                       let tabGroup = self.projectTabs[projectPath],
+                       tabGroup.tabs.count > 1 {
+                        tabGroup.gotoTab(GHOSTTY_GOTO_TAB_PREVIOUS.rawValue)
+                        if let project = self.projectStore.project(forPath: projectPath) {
+                            self.showProjectTerminals(for: project)
+                        }
+                        return nil
+                    }
+                case 30: // ] key — next tab (wraps around)
+                    if let projectPath = self.activeProjectPath,
+                       let tabGroup = self.projectTabs[projectPath],
+                       tabGroup.tabs.count > 1 {
+                        tabGroup.gotoTab(GHOSTTY_GOTO_TAB_NEXT.rawValue)
+                        if let project = self.projectStore.project(forPath: projectPath) {
+                            self.showProjectTerminals(for: project)
+                        }
+                        return nil
+                    }
+                default:
+                    break
+                }
+
+                switch event.charactersIgnoringModifiers {
+                case "l", "L":
+                    self.toggleLeftSidebar(nil)
+                    return nil
+                case "r", "R":
+                    self.toggleRightSidebar(nil)
+                    return nil
+                case "d", "D":
+                    // Disable Cmd+Shift+D (new_split:down)
+                    if self.activeProjectPath != nil { return nil }
+                case "w", "W":
+                    // Disable Cmd+Shift+W (close_window — not applicable)
+                    if self.activeProjectPath != nil { return nil }
+                case "p", "P":
+                    // Disable Cmd+Shift+P (Ghostty command palette — not applicable)
+                    if self.activeProjectPath != nil { return nil }
+                default:
+                    break
+                }
             }
-            switch event.charactersIgnoringModifiers {
-            case "l", "L":
-                self.toggleLeftSidebar(nil)
+
+            // Disable Cmd+Alt+I (Ghostty inspector — not applicable)
+            if flags == [.command, .option],
+               event.charactersIgnoringModifiers?.lowercased() == "i",
+               self.activeProjectPath != nil {
                 return nil
-            case "r", "R":
-                self.toggleRightSidebar(nil)
-                return nil
-            default:
-                return event
             }
+
+            // Cmd-only shortcuts
+            if flags == [.command], let char = event.charactersIgnoringModifiers {
+                // Cmd+Number (tab switching)
+                if let digit = char.first?.wholeNumberValue,
+                   digit >= 1, digit <= 9,
+                   let projectPath = self.activeProjectPath,
+                   let tabGroup = self.projectTabs[projectPath],
+                   !tabGroup.isEmpty {
+                    let targetIndex = digit == 9
+                        ? tabGroup.tabs.count - 1
+                        : min(digit - 1, tabGroup.tabs.count - 1)
+                    self.selectTab(at: targetIndex, projectPath: projectPath)
+                    return nil
+                }
+
+                // Cmd+W (close tab)
+                if char == "w",
+                   let projectPath = self.activeProjectPath,
+                   let tabGroup = self.projectTabs[projectPath],
+                   !tabGroup.isEmpty {
+                    self.closeTab(at: tabGroup.activeTabIndex, projectPath: projectPath)
+                    return nil
+                }
+
+                // Cmd+T (new shell tab)
+                if char == "t", let projectPath = self.activeProjectPath {
+                    self.createShellTab(projectPath: projectPath)
+                    return nil
+                }
+
+                // Disable Cmd+N (new_window — not applicable)
+                if char == "n", self.activeProjectPath != nil {
+                    return nil
+                }
+
+                // Disable Cmd+D (new_split:right)
+                if char == "d", self.activeProjectPath != nil {
+                    return nil
+                }
+
+                // Disable Cmd+[ and Cmd+] (goto_split)
+                if (char == "[" || char == "]"), self.activeProjectPath != nil {
+                    return nil
+                }
+            }
+
+            // Cmd+Enter (fullscreen the GhostCode window, not the terminal)
+            if flags == [.command], event.keyCode == 36, self.activeProjectPath != nil {
+                self.window?.toggleFullScreen(nil)
+                return nil
+            }
+
+            // Disable Cmd+Shift+Alt+W (close_all_windows — not applicable)
+            if flags == [.command, .shift, .option],
+               event.charactersIgnoringModifiers?.lowercased() == "w",
+               self.activeProjectPath != nil {
+                return nil
+            }
+
+            // Disable Cmd+Alt split shortcuts (goto_split directional)
+            if flags == [.command, .option], self.activeProjectPath != nil {
+                let keyCode = event.keyCode
+                // Arrow keys: up=126, down=125, left=123, right=124
+                if keyCode == 126 || keyCode == 125 || keyCode == 123 || keyCode == 124 {
+                    return nil
+                }
+            }
+
+            // Cmd+Ctrl+F (fullscreen the GhostCode window — alternate)
+            if flags == [.command, .control],
+               event.charactersIgnoringModifiers == "f",
+               self.activeProjectPath != nil {
+                self.window?.toggleFullScreen(nil)
+                return nil
+            }
+
+            // Disable Cmd+Ctrl split shortcuts (resize_split)
+            if flags == [.command, .control], self.activeProjectPath != nil {
+                let keyCode = event.keyCode
+                if keyCode == 126 || keyCode == 125 || keyCode == 123 || keyCode == 124 {
+                    return nil
+                }
+            }
+
+            // Disable Cmd+Ctrl+= (equalize_splits)
+            if flags == [.command, .control],
+               event.charactersIgnoringModifiers == "=",
+               self.activeProjectPath != nil {
+                return nil
+            }
+
+            return event
         }
     }
 
@@ -328,14 +473,18 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                 subview.removeFromSuperview()
             }
 
-            // Transfer first responder after the layout pass completes
-            // so the Metal surface has valid bounds.
-            DispatchQueue.main.async { [weak self] in
+            // Cancel any pending focus transfer from a previous call
+            // (e.g. rapid Cmd+T presses) so only the latest one runs.
+            // A small delay ensures the Metal surface completes its layout pass.
+            self.pendingFocusWork?.cancel()
+            let focusWork = DispatchWorkItem { [weak self] in
                 guard let self,
                       let surface = self.activeTerminalController?.focusedSurface,
                       let window = self.window else { return }
                 window.makeFirstResponder(surface)
             }
+            self.pendingFocusWork = focusWork
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: focusWork)
         }
     }
 
