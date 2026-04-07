@@ -65,6 +65,7 @@ Requires macOS 13.0 or later. Runs natively on both Apple Silicon and Intel Macs
 ### Terminal Sessions
 
 - Powered by Ghostty's terminal engine (`libghostty`)
+- Multiple tabs per project (AI and shell) with standard macOS keyboard shortcuts
 - Session resume support for Claude Code (`--continue`)
 - Background session indicators (active/inactive/visible state tracking)
 - Terminal exit detection with automatic return to landing page
