@@ -2,7 +2,8 @@ import SwiftUI
 
 struct GhostCodeTabBar: View {
     @ObservedObject var tabGroup: ProjectTabGroup
-    var onNewTab: () -> Void
+    var onNewShellTab: () -> Void
+    var onNewAITab: () -> Void
     var onCloseTab: (Int) -> Void
     var onSelectTab: (Int) -> Void
     var onCloseOtherTabs: (Int) -> Void
@@ -26,15 +27,9 @@ struct GhostCodeTabBar: View {
 
             Spacer()
 
-            Button(action: onNewTab) {
-                Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 6)
+            TabBarButton(icon: "sparkles", size: 10, tooltip: "New AI tab", action: onNewAITab)
+            TabBarButton(icon: "plus", size: 11, tooltip: "New shell tab", action: onNewShellTab)
+                .padding(.trailing, 6)
         }
         .frame(height: 30)
         .background(Color(nsColor: NSColor(white: 0.1, alpha: 1)))
@@ -92,5 +87,33 @@ private struct TabBarItem: View {
             Button("Close Tab") { onClose() }
             Button("Close Other Tabs") { onCloseOthers() }
         }
+    }
+}
+
+private struct TabBarButton: View {
+    let icon: String
+    let size: CGFloat
+    let tooltip: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: size, weight: .medium))
+                .foregroundColor(isHovering ? .primary : .secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    isHovering
+                        ? Color(nsColor: NSColor(white: 0.2, alpha: 1))
+                        : Color.clear
+                )
+                .cornerRadius(5)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .instantTooltip(tooltip)
     }
 }

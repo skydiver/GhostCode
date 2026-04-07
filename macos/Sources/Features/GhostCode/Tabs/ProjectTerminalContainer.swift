@@ -4,7 +4,8 @@ import GhosttyKit
 struct ProjectTerminalContainer: View {
     @ObservedObject var tabGroup: ProjectTabGroup
     let ghostty: Ghostty.App
-    var onNewTab: () -> Void
+    var onNewShellTab: () -> Void
+    var onNewAITab: () -> Void
     var onCloseTab: (Int) -> Void
     var onSelectTab: (Int) -> Void
     var onCloseOtherTabs: (Int) -> Void
@@ -13,7 +14,8 @@ struct ProjectTerminalContainer: View {
         VStack(spacing: 0) {
             GhostCodeTabBar(
                 tabGroup: tabGroup,
-                onNewTab: onNewTab,
+                onNewShellTab: onNewShellTab,
+                onNewAITab: onNewAITab,
                 onCloseTab: onCloseTab,
                 onSelectTab: onSelectTab,
                 onCloseOtherTabs: onCloseOtherTabs

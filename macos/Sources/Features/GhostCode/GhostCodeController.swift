@@ -302,8 +302,11 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             let container = ProjectTerminalContainer(
                 tabGroup: tabGroup,
                 ghostty: self.ghostty,
-                onNewTab: { [weak self] in
+                onNewShellTab: { [weak self] in
                     self?.createShellTab(projectPath: project.path)
+                },
+                onNewAITab: { [weak self] in
+                    self?.createAITab(projectPath: project.path)
                 },
                 onCloseTab: { [weak self] index in
                     self?.closeTab(at: index, projectPath: project.path)
@@ -374,6 +377,33 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
         // Recreate the hosting view so the Metal surface gets correct initial bounds.
         if let project = projectStore.project(forPath: projectPath) {
+            showProjectTerminals(for: project)
+        }
+    }
+
+    private func createAITab(projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath] else { return }
+        guard let project = projectStore.project(forPath: projectPath) else { return }
+
+        let binary = project.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
+
+        Task {
+            let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName)
+            var config = Ghostty.SurfaceConfiguration()
+            config.workingDirectory = projectPath
+            config.hushLogin = true
+            let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+            config.command = "\(shell) -l -c 'exec \(resolvedPath)'"
+
+            let controller = TerminalController(ghostty, withBaseConfig: config)
+
+            if case .leaf(let view) = controller.surfaceTree.root {
+                controller.focusedSurface = view
+            }
+
+            let tab = TabItem(controller: controller, kind: .ai, title: binary.displayName)
+            tabGroup.addTab(tab)
+            observeTabExit(tab, projectPath: projectPath)
             showProjectTerminals(for: project)
         }
     }
