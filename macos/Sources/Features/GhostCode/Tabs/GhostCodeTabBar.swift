@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct GhostCodeTabBar: View {
     @ObservedObject var tabGroup: ProjectTabGroup
@@ -100,6 +101,25 @@ struct GhostCodeTabBar: View {
     }
 }
 
+/// Observes a tab's surface title via Combine and provides a live display title.
+private class TabTitleProvider: ObservableObject {
+    @Published var displayTitle: String
+    private var cancellable: AnyCancellable?
+
+    init(tab: TabItem) {
+        let fallback = tab.title
+        if let surface = tab.controller.focusedSurface {
+            displayTitle = surface.title.isEmpty ? fallback : surface.title
+            cancellable = surface.$title
+                .map { $0.isEmpty ? fallback : $0 }
+                .receive(on: DispatchQueue.main)
+                .assign(to: \.displayTitle, on: self)
+        } else {
+            displayTitle = fallback
+        }
+    }
+}
+
 private struct TabMidpointKey: PreferenceKey {
     static var defaultValue: [UUID: CGFloat] = [:]
     static func reduce(value: inout [UUID: CGFloat], nextValue: () -> [UUID: CGFloat]) {
@@ -108,12 +128,25 @@ private struct TabMidpointKey: PreferenceKey {
 }
 
 private struct TabBarItem: View {
-    let tab: TabItem
+    @StateObject private var titleProvider: TabTitleProvider
+    let kind: TabKind
     let isActive: Bool
     let isDragging: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
     let onCloseOthers: () -> Void
+
+    init(tab: TabItem, isActive: Bool, isDragging: Bool,
+         onSelect: @escaping () -> Void, onClose: @escaping () -> Void,
+         onCloseOthers: @escaping () -> Void) {
+        _titleProvider = StateObject(wrappedValue: TabTitleProvider(tab: tab))
+        self.kind = tab.kind
+        self.isActive = isActive
+        self.isDragging = isDragging
+        self.onSelect = onSelect
+        self.onClose = onClose
+        self.onCloseOthers = onCloseOthers
+    }
 
     @State private var isHovering = false
     @State private var isCloseHovering = false
@@ -121,10 +154,10 @@ private struct TabBarItem: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(tab.kind == .ai ? Color.blue : Color.green)
+                .fill(kind == .ai ? Color.blue : Color.green)
                 .frame(width: 7, height: 7)
 
-            Text(tab.title)
+            Text(titleProvider.displayTitle)
                 .font(.system(size: 12))
                 .foregroundColor(isActive ? .primary : .secondary)
                 .lineLimit(1)
