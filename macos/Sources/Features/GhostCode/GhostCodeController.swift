@@ -25,11 +25,11 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     let commandStore = CommandStore()
     let commandPaletteState = CommandPaletteState()
 
-    // The currently visible terminal controller, if any
-    private(set) var activeTerminalController: TerminalController?
+    // The project path whose terminals are currently displayed in the center pane
+    private var activeProjectPath: String?
 
-    // Maps project paths to their active terminal controllers
-    private var terminalControllers: [String: TerminalController] = [:]
+    // Maps project paths to their tab groups
+    private var projectTabs: [String: ProjectTabGroup] = [:]
 
     // Center content: either startup view or terminal
     private let centerContainer = NSView()
@@ -37,8 +37,20 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // The startup view, shown when no terminal is active
     private var startupHostingView: NSView?
 
-    // Combine cancellables for terminal exit polling
-    private var exitCancellables: [String: AnyCancellable] = [:]
+    // Combine cancellables for per-tab exit polling, keyed by TabItem.id
+    private var exitCancellables: [UUID: AnyCancellable] = [:]
+
+    // The currently active terminal controller, resolved through the tab group
+    var activeTerminalController: TerminalController? {
+        guard let path = activeProjectPath else { return nil }
+        return projectTabs[path]?.activeTab?.controller
+    }
+
+    // The active tab group for the currently visible project
+    private var activeTabGroup: ProjectTabGroup? {
+        guard let path = activeProjectPath else { return nil }
+        return projectTabs[path]
+    }
 
     // Keyboard event monitor for sidebar toggles
     private var eventMonitor: Any?
@@ -68,6 +80,17 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         if !window.setFrameUsingName("GhostCodeMainWindow") {
             window.center()
         }
+
+        // Ghostty tab action notifications
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(onGhosttyNewTab(_:)),
+                           name: Ghostty.Notification.ghosttyNewTab, object: nil)
+        center.addObserver(self, selector: #selector(onGhosttyGotoTab(_:)),
+                           name: Ghostty.Notification.ghosttyGotoTab, object: nil)
+        center.addObserver(self, selector: #selector(onGhosttyMoveTab(_:)),
+                           name: .ghosttyMoveTab, object: nil)
+        center.addObserver(self, selector: #selector(onGhosttyCloseTab(_:)),
+                           name: .ghosttyCloseTab, object: nil)
     }
 
     @available(*, unavailable)
@@ -163,7 +186,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
         ])
         startupHostingView = hostingView
-        activeTerminalController = nil
+        activeProjectPath = nil
         projectStore.setSelected(nil)
         updateRightSidebarLock()
     }
@@ -198,7 +221,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
         ])
         startupHostingView = hostingView
-        activeTerminalController = nil
+        activeProjectPath = nil
         projectStore.setSelected(project.path)
         updateRightSidebarLock()
     }
@@ -206,21 +229,22 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // MARK: - Project Activation
 
     func activateProject(_ project: Project) {
-        if let existingController = terminalControllers[project.path] {
-            // If the process has exited, clean up and show landing page
-            if existingController.surfaceTree.isEmpty || isProcessExited(existingController) {
-                terminalControllers.removeValue(forKey: project.path)
-                exitCancellables.removeValue(forKey: project.path)
-                projectStore.setActive(project.path, active: false)
+        if let tabGroup = projectTabs[project.path], !tabGroup.isEmpty {
+            // Check if all tabs have exited
+            let allExited = tabGroup.tabs.allSatisfy { tab in
+                isProcessExited(tab.controller)
+            }
+            if allExited {
+                cleanupTabGroup(for: project.path)
                 showProjectLanding(for: project)
                 return
             }
-            switchToTerminal(existingController, project: project)
+            showProjectTerminals(for: project)
             return
         }
 
         // Already showing the landing page for this project — don't recreate it.
-        if activeTerminalController == nil && projectStore.selectedPath == project.path {
+        if activeProjectPath == nil && projectStore.selectedPath == project.path {
             return
         }
 
@@ -257,32 +281,44 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             controller.focusedSurface = view
         }
 
-        terminalControllers[project.path] = controller
+        let tab = TabItem(controller: controller, kind: .ai, title: binary.displayName)
+        let tabGroup = ProjectTabGroup()
+        tabGroup.addTab(tab)
+        projectTabs[project.path] = tabGroup
 
         projectStore.setActive(project.path, active: true)
-        switchToTerminal(controller, project: project)
-        observeTerminalExit(controller, projectPath: project.path)
+        showProjectTerminals(for: project)
+        observeTabExit(tab, projectPath: project.path)
     }
 
-    private func switchToTerminal(_ controller: TerminalController, project: Project) {
+    private func showProjectTerminals(for project: Project) {
+        guard let tabGroup = projectTabs[project.path], !tabGroup.isEmpty else { return }
+
         startupHostingView = nil
-        activeTerminalController = controller
+        activeProjectPath = project.path
         projectStore.setVisible(project.path)
         updateRightSidebarLock()
 
-        // Build the new terminal view before removing the old one to avoid a
+        // Build the new container before removing the old one to avoid a
         // visible flash. We defer the swap to the next run loop so the center
         // container has valid bounds from the previous layout pass.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
 
-            let terminalView = TerminalView(
+            let container = ProjectTerminalContainer(
+                tabGroup: tabGroup,
                 ghostty: self.ghostty,
-                viewModel: controller,
-                delegate: controller
+                onNewTab: { [weak self] in
+                    self?.createShellTab(projectPath: project.path)
+                },
+                onCloseTab: { [weak self] index in
+                    self?.closeTab(at: index, projectPath: project.path)
+                },
+                onCloseOtherTabs: { [weak self] index in
+                    self?.closeOtherTabs(keepIndex: index, projectPath: project.path)
+                }
             )
-            .environment(\.surfaceGrabHandleEnabled, false)
-            let hostingView = NSHostingView(rootView: terminalView)
+            let hostingView = NSHostingView(rootView: container)
             hostingView.sizingOptions = []
             hostingView.translatesAutoresizingMaskIntoConstraints = false
             hostingView.frame = self.centerContainer.bounds
@@ -301,38 +337,166 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    private func observeTerminalExit(_ controller: TerminalController, projectPath: String) {
+    // MARK: - Tab Management
+
+    private func createShellTab(projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath] else { return }
+
+        var config = Ghostty.SurfaceConfiguration()
+        config.workingDirectory = projectPath
+        config.hushLogin = true
+
+        let controller = TerminalController(ghostty, withBaseConfig: config)
+
+        if case .leaf(let view) = controller.surfaceTree.root {
+            controller.focusedSurface = view
+        }
+
+        let tab = TabItem(controller: controller, kind: .shell, title: "shell")
+        tabGroup.addTab(tab)
+        observeTabExit(tab, projectPath: projectPath)
+        updateRightSidebarLock()
+    }
+
+    private func closeTab(at index: Int, projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath] else { return }
+        guard let removed = tabGroup.removeTab(at: index) else { return }
+
+        exitCancellables.removeValue(forKey: removed.id)
+
+        if tabGroup.isEmpty {
+            cleanupTabGroup(for: projectPath)
+
+            if activeProjectPath == projectPath {
+                if let project = projectStore.project(forPath: projectPath) {
+                    showProjectLanding(for: project)
+                } else {
+                    showStartupScreen()
+                }
+            }
+        }
+        updateRightSidebarLock()
+    }
+
+    private func closeOtherTabs(keepIndex: Int, projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath] else { return }
+        guard keepIndex >= 0, keepIndex < tabGroup.tabs.count else { return }
+
+        let keepTab = tabGroup.tabs[keepIndex]
+        for tab in tabGroup.tabs where tab.id != keepTab.id {
+            exitCancellables.removeValue(forKey: tab.id)
+        }
+
+        tabGroup.tabs = [keepTab]
+        tabGroup.activeTabIndex = 0
+        updateRightSidebarLock()
+    }
+
+    // MARK: - Tab Exit Observation
+
+    private func observeTabExit(_ tab: TabItem, projectPath: String) {
+        let tabId = tab.id
+        let controller = tab.controller
         let cancellable = Timer.publish(every: 1.0, on: .main, in: .default)
             .autoconnect()
             .first(where: { [weak self] _ in
                 self?.isProcessExited(controller) ?? true
             })
             .sink { [weak self] _ in
-                self?.handleTerminalExit(projectPath: projectPath)
+                self?.handleTabExit(tabId: tabId, projectPath: projectPath)
             }
-        exitCancellables[projectPath] = cancellable
+        exitCancellables[tabId] = cancellable
     }
 
-    private func handleTerminalExit(projectPath: String) {
-        guard terminalControllers.removeValue(forKey: projectPath) != nil else { return }
-        exitCancellables.removeValue(forKey: projectPath)
+    private func handleTabExit(tabId: UUID, projectPath: String) {
+        exitCancellables.removeValue(forKey: tabId)
+
+        guard let tabGroup = projectTabs[projectPath] else { return }
+        tabGroup.removeTab(withId: tabId)
+
+        if tabGroup.isEmpty {
+            cleanupTabGroup(for: projectPath)
+
+            if activeProjectPath == projectPath {
+                if let previousPath = projectStore.previousActiveProjectPath(excluding: projectPath),
+                   let prevGroup = projectTabs[previousPath], !prevGroup.isEmpty,
+                   let project = projectStore.project(forPath: previousPath) {
+                    showProjectTerminals(for: project)
+                } else if let project = projectStore.project(forPath: projectPath) {
+                    showProjectLanding(for: project)
+                } else {
+                    showStartupScreen()
+                }
+            }
+        }
+        updateRightSidebarLock()
+    }
+
+    private func cleanupTabGroup(for projectPath: String) {
+        if let tabGroup = projectTabs[projectPath] {
+            for tab in tabGroup.tabs {
+                exitCancellables.removeValue(forKey: tab.id)
+            }
+        }
+        projectTabs.removeValue(forKey: projectPath)
         projectStore.setActive(projectPath, active: false)
         projectStore.removeFromHistory(projectPath)
-
-        if let previousPath = projectStore.previousActiveProjectPath(excluding: projectPath),
-           let controller = terminalControllers[previousPath],
-           let project = projectStore.project(forPath: previousPath) {
-            switchToTerminal(controller, project: project)
-        } else if let project = projectStore.project(forPath: projectPath) {
-            showProjectLanding(for: project)
-        } else {
-            showStartupScreen()
-        }
     }
 
     private func isProcessExited(_ controller: TerminalController) -> Bool {
         guard case .leaf(let view) = controller.surfaceTree.root else { return true }
         return view.processExited
+    }
+
+    // MARK: - Ghostty Tab Notifications
+
+    /// Returns the project path that owns the given surface view, if any.
+    private func projectPath(for surface: Ghostty.SurfaceView) -> String? {
+        for (path, tabGroup) in projectTabs {
+            for tab in tabGroup.tabs {
+                if tab.controller.surfaceTree.contains(surface) {
+                    return path
+                }
+            }
+        }
+        return nil
+    }
+
+    @objc private func onGhosttyNewTab(_ notification: Notification) {
+        guard let surface = notification.object as? Ghostty.SurfaceView,
+              let projectPath = projectPath(for: surface) else { return }
+        createShellTab(projectPath: projectPath)
+    }
+
+    @objc private func onGhosttyGotoTab(_ notification: Notification) {
+        guard let surface = notification.object as? Ghostty.SurfaceView,
+              let projectPath = projectPath(for: surface),
+              let tabGroup = projectTabs[projectPath] else { return }
+
+        guard let tabEnumAny = notification.userInfo?[Ghostty.Notification.GotoTabKey],
+              let tabEnum = tabEnumAny as? ghostty_action_goto_tab_e else { return }
+
+        tabGroup.gotoTab(tabEnum.rawValue)
+        updateRightSidebarLock()
+    }
+
+    @objc private func onGhosttyMoveTab(_ notification: Notification) {
+        guard let surface = notification.object as? Ghostty.SurfaceView,
+              let projectPath = projectPath(for: surface),
+              let tabGroup = projectTabs[projectPath] else { return }
+
+        guard let action = notification.userInfo?[Notification.Name.GhosttyMoveTabKey] as? Ghostty.Action.MoveTab else { return }
+        guard action.amount != 0 else { return }
+
+        tabGroup.moveTab(from: tabGroup.activeTabIndex, by: action.amount)
+    }
+
+    @objc private func onGhosttyCloseTab(_ notification: Notification) {
+        guard let surface = notification.object as? Ghostty.SurfaceView,
+              let projectPath = projectPath(for: surface),
+              let tabGroup = projectTabs[projectPath] else { return }
+
+        closeTab(at: tabGroup.activeTabIndex, projectPath: projectPath)
     }
 
     // MARK: - Command Execution
