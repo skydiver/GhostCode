@@ -1,5 +1,4 @@
 import SwiftUI
-import GhosttyKit
 
 struct ProjectTerminalContainer: View {
     @ObservedObject var tabGroup: ProjectTabGroup

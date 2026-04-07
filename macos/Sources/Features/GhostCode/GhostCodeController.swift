@@ -17,7 +17,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     // Sidebar hosting controllers
     private var leftSidebarItem: NSSplitViewItem!
-    private var centerItem: NSSplitViewItem!
     private var rightSidebarItem: NSSplitViewItem!
 
     // Stores
@@ -33,9 +32,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     // Center content: either startup view or terminal
     private let centerContainer = NSView()
-
-    // The startup view, shown when no terminal is active
-    private var startupHostingView: NSView?
 
     // Combine cancellables for per-tab exit polling, keyed by TabItem.id
     private var exitCancellables: [UUID: AnyCancellable] = [:]
@@ -118,7 +114,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         // Center: terminal or startup screen
         let centerVC = NSViewController()
         centerVC.view = centerContainer
-        centerItem = NSSplitViewItem(viewController: centerVC)
+        let centerItem = NSSplitViewItem(viewController: centerVC)
         centerItem.minimumThickness = 400
 
         // Right sidebar: command palette
@@ -161,13 +157,13 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    var hasActiveTerminal: Bool {
+    private var hasActiveTerminal: Bool {
         activeTerminalController != nil
     }
 
     // MARK: - Startup Screen
 
-    func showStartupScreen() {
+    private func showStartupScreen() {
         centerContainer.subviews.forEach { $0.removeFromSuperview() }
 
         let hostingView = NSHostingView(rootView: StartupView())
@@ -179,7 +175,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             hostingView.leadingAnchor.constraint(equalTo: centerContainer.leadingAnchor),
             hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
         ])
-        startupHostingView = hostingView
         activeProjectPath = nil
         projectStore.setSelected(nil)
         updateRightSidebarLock()
@@ -214,7 +209,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             hostingView.leadingAnchor.constraint(equalTo: centerContainer.leadingAnchor),
             hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
         ])
-        startupHostingView = hostingView
         activeProjectPath = nil
         projectStore.setSelected(project.path)
         updateRightSidebarLock()
@@ -222,7 +216,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     // MARK: - Project Activation
 
-    func activateProject(_ project: Project) {
+    private func activateProject(_ project: Project) {
         if let tabGroup = projectTabs[project.path], !tabGroup.isEmpty {
             // Check if all tabs have exited
             let allExited = tabGroup.tabs.allSatisfy { tab in
@@ -288,7 +282,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     private func showProjectTerminals(for project: Project) {
         guard let tabGroup = projectTabs[project.path], !tabGroup.isEmpty else { return }
 
-        startupHostingView = nil
         activeProjectPath = project.path
         projectStore.setVisible(project.path)
         updateRightSidebarLock()
@@ -594,7 +587,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         return project.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
     }
 
-    func sendTextToActiveTerminal(_ text: String, sendEnter: Bool = true) {
+    private func sendTextToActiveTerminal(_ text: String, sendEnter: Bool = true) {
         if sendEnter {
             switch activeBinary.inputStrategy {
             case .rawCR:

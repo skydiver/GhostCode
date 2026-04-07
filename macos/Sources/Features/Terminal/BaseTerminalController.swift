@@ -300,7 +300,11 @@ class BaseTerminalController: NSWindowController,
         for surfaceView in surfaceTree {
             // Our focus state requires that this window is key and our currently
             // focused surface is the surface in this view.
-            let focused: Bool = (window?.isKeyWindow ?? false) &&
+            // Use the surface's own window first — when the controller is embedded
+            // (e.g. GhostCode) it has no window of its own, but the surface view
+            // lives inside the host window.
+            let effectiveWindow = surfaceView.window ?? window
+            let focused: Bool = (effectiveWindow?.isKeyWindow ?? false) &&
                 !commandPaletteIsShowing &&
                 focusedSurface != nil &&
                 surfaceView == focusedSurface!

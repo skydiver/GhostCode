@@ -14,11 +14,9 @@ final class ProjectTabGroup: ObservableObject {
 
     var isEmpty: Bool { tabs.isEmpty }
 
-    func addTab(_ tab: TabItem, activate: Bool = true) {
+    func addTab(_ tab: TabItem) {
         tabs.append(tab)
-        if activate {
-            activeTabIndex = tabs.count - 1
-        }
+        activeTabIndex = tabs.count - 1
     }
 
     @discardableResult

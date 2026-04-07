@@ -10,7 +10,7 @@ struct TabItem: Identifiable {
     let id: UUID
     let controller: TerminalController
     let kind: TabKind
-    var title: String
+    let title: String
 
     init(controller: TerminalController, kind: TabKind, title: String) {
         self.id = UUID()
