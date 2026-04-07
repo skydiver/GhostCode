@@ -44,6 +44,21 @@ final class ProjectTabGroup: ObservableObject {
         activeTabIndex = index
     }
 
+    func moveTab(fromIndex: Int, toIndex: Int) {
+        guard fromIndex != toIndex,
+              fromIndex >= 0, fromIndex < tabs.count,
+              toIndex >= 0, toIndex < tabs.count else { return }
+        let tab = tabs.remove(at: fromIndex)
+        tabs.insert(tab, at: toIndex)
+        if activeTabIndex == fromIndex {
+            activeTabIndex = toIndex
+        } else if fromIndex < activeTabIndex, toIndex >= activeTabIndex {
+            activeTabIndex -= 1
+        } else if fromIndex > activeTabIndex, toIndex <= activeTabIndex {
+            activeTabIndex += 1
+        }
+    }
+
     func moveTab(from sourceIndex: Int, by offset: Int) {
         let targetIndex = min(max(sourceIndex + offset, 0), tabs.count - 1)
         guard sourceIndex != targetIndex,
