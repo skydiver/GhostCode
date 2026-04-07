@@ -12,7 +12,6 @@ struct GhostCodeTabBar: View {
             ForEach(Array(tabGroup.tabs.enumerated()), id: \.element.id) { index, tab in
                 TabBarItem(
                     tab: tab,
-                    index: index,
                     isActive: index == tabGroup.activeTabIndex,
                     onSelect: { onSelectTab(index) },
                     onClose: { onCloseTab(index) },
@@ -44,13 +43,13 @@ struct GhostCodeTabBar: View {
 
 private struct TabBarItem: View {
     let tab: TabItem
-    let index: Int
     let isActive: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
     let onCloseOthers: () -> Void
 
     @State private var isHovering = false
+    @State private var isCloseHovering = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -68,16 +67,23 @@ private struct TabBarItem: View {
                     .font(.system(size: 8, weight: .medium))
                     .foregroundColor(isHovering || isActive ? .secondary : .clear)
                     .frame(width: 16, height: 16)
+                    .background(
+                        isCloseHovering
+                            ? Color(nsColor: NSColor(white: 0.25, alpha: 1))
+                            : Color.clear
+                    )
+                    .cornerRadius(3)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { isCloseHovering = $0 }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .frame(maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? Color(nsColor: NSColor(white: 0.17, alpha: 1)) : Color.clear)
-                .padding(.bottom, -2)
+            isActive
+                ? Color(nsColor: NSColor(white: 0.17, alpha: 1))
+                : Color.clear
         )
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }

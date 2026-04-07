@@ -6,6 +6,7 @@ struct ProjectTerminalContainer: View {
     let ghostty: Ghostty.App
     var onNewTab: () -> Void
     var onCloseTab: (Int) -> Void
+    var onSelectTab: (Int) -> Void
     var onCloseOtherTabs: (Int) -> Void
 
     var body: some View {
@@ -14,9 +15,7 @@ struct ProjectTerminalContainer: View {
                 tabGroup: tabGroup,
                 onNewTab: onNewTab,
                 onCloseTab: onCloseTab,
-                onSelectTab: { index in
-                    tabGroup.activateTab(at: index)
-                },
+                onSelectTab: onSelectTab,
                 onCloseOtherTabs: onCloseOtherTabs
             )
 

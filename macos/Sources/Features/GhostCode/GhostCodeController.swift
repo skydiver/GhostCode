@@ -46,12 +46,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         return projectTabs[path]?.activeTab?.controller
     }
 
-    // The active tab group for the currently visible project
-    private var activeTabGroup: ProjectTabGroup? {
-        guard let path = activeProjectPath else { return nil }
-        return projectTabs[path]
-    }
-
     // Keyboard event monitor for sidebar toggles
     private var eventMonitor: Any?
 
@@ -314,6 +308,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                 onCloseTab: { [weak self] index in
                     self?.closeTab(at: index, projectPath: project.path)
                 },
+                onSelectTab: { [weak self] index in
+                    self?.selectTab(at: index, projectPath: project.path)
+                },
                 onCloseOtherTabs: { [weak self] index in
                     self?.closeOtherTabs(keepIndex: index, projectPath: project.path)
                 }
@@ -334,10 +331,29 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             for subview in self.centerContainer.subviews where subview !== hostingView {
                 subview.removeFromSuperview()
             }
+
+            // Transfer first responder after the layout pass completes
+            // so the Metal surface has valid bounds.
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      let surface = self.activeTerminalController?.focusedSurface,
+                      let window = self.window else { return }
+                window.makeFirstResponder(surface)
+            }
         }
     }
 
     // MARK: - Tab Management
+
+    private func selectTab(at index: Int, projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath] else { return }
+        tabGroup.activateTab(at: index)
+
+        // Recreate the hosting view so the Metal surface gets correct initial bounds.
+        if let project = projectStore.project(forPath: projectPath) {
+            showProjectTerminals(for: project)
+        }
+    }
 
     private func createShellTab(projectPath: String) {
         guard let tabGroup = projectTabs[projectPath] else { return }
@@ -355,10 +371,45 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         let tab = TabItem(controller: controller, kind: .shell, title: "shell")
         tabGroup.addTab(tab)
         observeTabExit(tab, projectPath: projectPath)
-        updateRightSidebarLock()
+
+        // Recreate the hosting view so the Metal surface gets correct initial bounds.
+        if let project = projectStore.project(forPath: projectPath) {
+            showProjectTerminals(for: project)
+        }
     }
 
     private func closeTab(at index: Int, projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath],
+              index >= 0, index < tabGroup.tabs.count else { return }
+
+        let tab = tabGroup.tabs[index]
+
+        // If the tab has a running process, confirm before closing
+        if tab.controller.surfaceTree.contains(where: { $0.needsConfirmQuit }) {
+            confirmCloseTab(at: index, projectPath: projectPath)
+            return
+        }
+
+        closeTabImmediately(at: index, projectPath: projectPath)
+    }
+
+    private func confirmCloseTab(at index: Int, projectPath: String) {
+        guard let window else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Close Terminal?"
+        alert.informativeText = "The terminal still has a running process. If you close the terminal the process will be killed."
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.closeTabImmediately(at: index, projectPath: projectPath)
+            }
+        }
+    }
+
+    private func closeTabImmediately(at index: Int, projectPath: String) {
         guard let tabGroup = projectTabs[projectPath] else { return }
         guard let removed = tabGroup.removeTab(at: index) else { return }
 
@@ -477,7 +528,10 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
               let tabEnum = tabEnumAny as? ghostty_action_goto_tab_e else { return }
 
         tabGroup.gotoTab(tabEnum.rawValue)
-        updateRightSidebarLock()
+
+        if let project = projectStore.project(forPath: projectPath) {
+            showProjectTerminals(for: project)
+        }
     }
 
     @objc private func onGhosttyMoveTab(_ notification: Notification) {
