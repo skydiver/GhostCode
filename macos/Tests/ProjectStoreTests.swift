@@ -117,4 +117,82 @@ final class ProjectStoreTests: XCTestCase {
         store.setBinary("/tmp/nonexistent", binary: .codex)
         XCTAssertNil(store.projects[0].binary)
     }
+
+    func testMoveProjectForward() {
+        store.addProject(path: "/tmp/project-a")
+        store.addProject(path: "/tmp/project-b")
+        store.addProject(path: "/tmp/project-c")
+        store.moveProject(from: 0, to: 2)
+        XCTAssertEqual(store.projects.map(\.path), [
+            "/tmp/project-b", "/tmp/project-c", "/tmp/project-a"
+        ])
+    }
+
+    func testMoveProjectBackward() {
+        store.addProject(path: "/tmp/project-a")
+        store.addProject(path: "/tmp/project-b")
+        store.addProject(path: "/tmp/project-c")
+        store.moveProject(from: 2, to: 0)
+        XCTAssertEqual(store.projects.map(\.path), [
+            "/tmp/project-c", "/tmp/project-a", "/tmp/project-b"
+        ])
+    }
+
+    func testMoveProjectSameIndex() {
+        store.addProject(path: "/tmp/project-a")
+        store.addProject(path: "/tmp/project-b")
+        store.moveProject(from: 0, to: 0)
+        XCTAssertEqual(store.projects.map(\.path), [
+            "/tmp/project-a", "/tmp/project-b"
+        ])
+    }
+
+    func testMoveProjectOutOfBounds() {
+        store.addProject(path: "/tmp/project-a")
+        store.moveProject(from: 0, to: 5)
+        XCTAssertEqual(store.projects.map(\.path), ["/tmp/project-a"])
+    }
+
+    func testReplaceProjects() {
+        store.addProject(path: "/tmp/project-a")
+        store.addProject(path: "/tmp/project-b")
+        store.addProject(path: "/tmp/project-c")
+
+        let reordered = [
+            Project(path: "/tmp/project-c"),
+            Project(path: "/tmp/project-a"),
+        ]
+        store.replaceProjects(reordered)
+
+        XCTAssertEqual(store.projects.count, 2)
+        XCTAssertEqual(store.projects.map(\.path), ["/tmp/project-c", "/tmp/project-a"])
+    }
+
+    func testReplaceProjectsPersists() {
+        store.addProject(path: "/tmp/project-a")
+        store.addProject(path: "/tmp/project-b")
+
+        let reordered = [
+            Project(path: "/tmp/project-b"),
+            Project(path: "/tmp/project-a"),
+        ]
+        store.replaceProjects(reordered)
+
+        let reloaded = ProjectStore(filePath: tempFile.path)
+        XCTAssertEqual(reloaded.projects.map(\.path), ["/tmp/project-b", "/tmp/project-a"])
+    }
+
+    func testReplaceProjectsPreservesBinary() {
+        store.addProject(path: "/tmp/project-a")
+        store.setBinary("/tmp/project-a", binary: .codex)
+        store.addProject(path: "/tmp/project-b")
+
+        let reordered = [
+            Project(path: "/tmp/project-b"),
+            Project(path: "/tmp/project-a"),
+        ]
+        store.replaceProjects(reordered)
+
+        XCTAssertEqual(store.projects[1].binary, .codex)
+    }
 }

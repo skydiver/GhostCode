@@ -33,6 +33,34 @@ final class ProjectStore: ObservableObject {
         saveToDisk()
     }
 
+    func moveProject(from source: Int, to destination: Int) {
+        guard source != destination,
+              projects.indices.contains(source),
+              projects.indices.contains(destination) else { return }
+        let project = projects.remove(at: source)
+        projects.insert(project, at: destination)
+        saveToDisk()
+    }
+
+    func replaceProjects(_ newProjects: [Project]) {
+        // Preserve binary preferences from existing projects
+        var binaryMap: [String: SupportedBinary] = [:]
+        for project in projects {
+            if let binary = project.binary {
+                binaryMap[project.path] = binary
+            }
+        }
+
+        projects = newProjects.map { project in
+            var updated = project
+            if updated.binary == nil, let binary = binaryMap[project.path] {
+                updated.binary = binary
+            }
+            return updated
+        }
+        saveToDisk()
+    }
+
     func setActive(_ path: String, active: Bool) {
         guard let index = projects.firstIndex(where: { $0.path == path }) else { return }
         projects[index].state = active ? .activeBackground : .inactive
