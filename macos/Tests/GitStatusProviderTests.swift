@@ -43,6 +43,15 @@ final class GitStatusProviderTests: XCTestCase {
         XCTAssertEqual(status?.behind, 1)
     }
 
+    func testParseDottedBranchName() {
+        let output = "## release/1.0...origin/release/1.0"
+        let status = GitStatusProvider.parseGitStatus(
+            statusOutput: output,
+            aheadBehind: ""
+        )
+        XCTAssertEqual(status?.branch, "release/1.0")
+    }
+
     func testParseNonGitDirectory() {
         let status = GitStatusProvider.parseGitStatus(
             statusOutput: "",

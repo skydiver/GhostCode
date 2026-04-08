@@ -113,10 +113,10 @@ struct ProjectListView: View {
                 .frame(width: 1)
         }
         .onReceive(gitRefreshTimer) { _ in
-            refreshAllGitStatus()
+            store.refreshAllGitStatus()
         }
         .onAppear {
-            refreshAllGitStatus()
+            store.refreshAllGitStatus()
         }
     }
 
@@ -257,13 +257,7 @@ struct ProjectListView: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             store.addProject(path: url.path)
-            refreshGitStatus(for: url.path)
-        }
-    }
-
-    private func refreshAllGitStatus() {
-        for project in store.projects {
-            refreshGitStatus(for: project.path)
+            store.refreshGitStatus(for: url.path)
         }
     }
 
@@ -310,15 +304,6 @@ struct ProjectListView: View {
         )
     }
 
-    private func refreshGitStatus(for path: String) {
-        Task {
-            if let status = await GitStatusProvider.fetchStatus(for: path) {
-                await MainActor.run {
-                    store.updateGitStatus(path: path, status: status)
-                }
-            }
-        }
-    }
 }
 
 // MARK: - PreferenceKey for row midpoints

@@ -836,7 +836,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // MARK: - Window Delegate
 
     func windowDidBecomeKey(_ notification: Notification) {
-        refreshAllGitStatus()
+        projectStore.refreshAllGitStatus()
 
         // Restore focus to the active terminal surface when the window
         // regains key status (e.g. returning from another app via Cmd+Tab
@@ -854,15 +854,4 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    private func refreshAllGitStatus() {
-        for project in projectStore.projects {
-            Task {
-                if let status = await GitStatusProvider.fetchStatus(for: project.path) {
-                    await MainActor.run {
-                        projectStore.updateGitStatus(path: project.path, status: status)
-                    }
-                }
-            }
-        }
-    }
 }

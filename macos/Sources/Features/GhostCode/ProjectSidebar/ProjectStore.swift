@@ -14,6 +14,7 @@ final class ProjectStore: ObservableObject {
 
     private let filePath: String
     private var activationHistory: [String] = []
+    private var refreshTasks: [String: Task<Void, Never>] = [:]
 
     init(filePath: String? = nil) {
         self.filePath = filePath ?? GhostCodeConfig.projectsFilePath
@@ -79,9 +80,28 @@ final class ProjectStore: ObservableObject {
         selectedPath = path
     }
 
-    func updateGitStatus(path: String, status: Project.GitStatus) {
+    func updateGitStatus(path: String, status: Project.GitStatus?) {
         guard let index = projects.firstIndex(where: { $0.path == path }) else { return }
         projects[index].gitStatus = status
+    }
+
+    // MARK: - Git Status Refresh
+
+    func refreshAllGitStatus() {
+        for project in projects {
+            refreshGitStatus(for: project.path)
+        }
+    }
+
+    func refreshGitStatus(for path: String) {
+        refreshTasks[path]?.cancel()
+        refreshTasks[path] = Task {
+            let status = await GitStatusProvider.fetchStatus(for: path)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                updateGitStatus(path: path, status: status)
+            }
+        }
     }
 
     func setBinary(_ path: String, binary: SupportedBinary?) {

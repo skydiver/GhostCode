@@ -33,7 +33,12 @@ final class GitStatusProvider {
 
         // Parse branch name: "## main...origin/main" or "## main"
         let branchPart = branchLine.dropFirst(3)  // Remove "## "
-        let branch = String(branchPart.split(separator: ".").first ?? branchPart.prefix(while: { $0 != " " }))
+        let branch: String
+        if let dotRange = branchPart.range(of: "...") {
+            branch = String(branchPart[..<dotRange.lowerBound])
+        } else {
+            branch = String(branchPart.prefix(while: { $0 != " " }))
+        }
 
         // Count changed files (all lines except the branch line)
         let changedFiles = lines.dropFirst().count
