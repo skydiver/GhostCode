@@ -477,7 +477,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             // (e.g. rapid Cmd+T presses) so only the latest one runs.
             self.pendingFocusWork?.cancel()
             let focusWork = DispatchWorkItem { [weak self] in
-                self?.transferFocusToActiveSurface(retries: 5)
+                self?.transferFocusToActiveSurface(retries: 10)
             }
             self.pendingFocusWork = focusWork
             DispatchQueue.main.async(execute: focusWork)
@@ -488,14 +488,28 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     /// Attempts to make the active terminal surface the first responder.
     /// Retries with increasing delay if the surface isn't ready yet
-    /// (e.g. Metal view hasn't completed its layout pass).
+    /// (e.g. Metal view hasn't completed its layout pass) or if SwiftUI's
+    /// focus system overrides the assignment during a layout pass.
     private func transferFocusToActiveSurface(retries: Int) {
         guard let surface = activeTerminalController?.focusedSurface,
               let window = window else { return }
 
+        // Ensure the window is key so keyboard input reaches the terminal
+        if !window.isKeyWindow {
+            window.makeKeyAndOrderFront(nil)
+        }
+
         // Surface must be in the view hierarchy with valid bounds
         if surface.window != nil, surface.bounds.width > 0 {
             window.makeFirstResponder(surface)
+
+            // Verify focus took effect — SwiftUI layout passes can reassign
+            // first responder after makeFirstResponder succeeds.
+            if window.firstResponder !== surface, retries > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.transferFocusToActiveSurface(retries: retries - 1)
+                }
+            }
         } else if retries > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                 self?.transferFocusToActiveSurface(retries: retries - 1)
