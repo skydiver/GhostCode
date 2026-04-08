@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The left sidebar view showing the project list.
 struct ProjectListView: View {
@@ -10,6 +11,9 @@ struct ProjectListView: View {
         on: .main,
         in: .default
     ).autoconnect()
+
+    @State private var isEditing = false
+    @State private var editingProjects: [Project] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,56 +36,114 @@ struct ProjectListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(store.projects) { project in
-                        ProjectRow(project: project, isSelected: store.selectedPath == project.path)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                onSelectProject(project)
-                            }
-                            .contextMenu {
-                                Button("Open in Finder") {
-                                    NSWorkspace.shared.selectFile(
-                                        nil,
-                                        inFileViewerRootedAtPath: project.path
-                                    )
-                                }
-                                Button("Copy Path") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(
-                                        project.path,
-                                        forType: .string
-                                    )
-                                }
-                                if let gitHubURL = project.gitStatus?.gitHubURL {
-                                    Button("Open on GitHub") {
-                                        NSWorkspace.shared.open(gitHubURL)
+                    if isEditing {
+                        ForEach(editingProjects) { project in
+                            EditableProjectRow(
+                                project: project,
+                                onDelete: {
+                                    withAnimation {
+                                        editingProjects.removeAll { $0.id == project.id }
                                     }
                                 }
-                                Divider()
-                                openWithMenuContent(for: project)
-                                Divider()
-                                Button("Remove Project", role: .destructive) {
-                                    store.removeProject(path: project.path)
-                                }
+                            )
+                            .onDrag {
+                                NSItemProvider(object: project.path as NSString)
                             }
+                            .onDrop(
+                                of: [.plainText],
+                                delegate: ProjectDropDelegate(
+                                    targetProject: project,
+                                    projects: $editingProjects
+                                )
+                            )
+                        }
+                    } else {
+                        ForEach(store.projects) { project in
+                            ProjectRow(project: project, isSelected: store.selectedPath == project.path)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    onSelectProject(project)
+                                }
+                                .contextMenu {
+                                    Button("Open in Finder") {
+                                        NSWorkspace.shared.selectFile(
+                                            nil,
+                                            inFileViewerRootedAtPath: project.path
+                                        )
+                                    }
+                                    Button("Copy Path") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(
+                                            project.path,
+                                            forType: .string
+                                        )
+                                    }
+                                    if let gitHubURL = project.gitStatus?.gitHubURL {
+                                        Button("Open on GitHub") {
+                                            NSWorkspace.shared.open(gitHubURL)
+                                        }
+                                    }
+                                    Divider()
+                                    openWithMenuContent(for: project)
+                                }
+                        }
                     }
                 }
             }
 
             Divider()
 
-            Button(action: addProject) {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus")
-                    Text("Add Project")
+            if isEditing {
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        cancelEdits()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+
+                    Button("Save") {
+                        saveEdits()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor)
+                    .cornerRadius(4)
                 }
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            } else {
+                HStack {
+                    Button(action: addProject) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                            Text("Add Project")
+                        }
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    Button(action: enterEditMode) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.projects.isEmpty)
+                }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
             }
-            .buttonStyle(.plain)
         }
         .frame(minWidth: 180, maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
@@ -96,6 +158,21 @@ struct ProjectListView: View {
         .onAppear {
             refreshAllGitStatus()
         }
+    }
+
+    private func enterEditMode() {
+        editingProjects = store.projects
+        isEditing = true
+    }
+
+    private func saveEdits() {
+        store.replaceProjects(editingProjects)
+        isEditing = false
+    }
+
+    private func cancelEdits() {
+        editingProjects = []
+        isEditing = false
     }
 
     private func addProject() {
@@ -242,5 +319,84 @@ struct ProjectRow: View {
         }
         if git.isDirty { return .yellow }
         return .blue
+    }
+}
+
+/// A simplified project row shown during edit mode with drag handle and delete button.
+struct EditableProjectRow: View {
+    let project: Project
+    let onDelete: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary.opacity(0.6))
+                .frame(width: 16)
+
+            Text(project.name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 0)
+
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.red)
+                    .frame(width: 22, height: 22)
+                    .background(Color.red.opacity(isHovering ? 0.2 : 0.1))
+                    .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovering = $0 }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                .foregroundStyle(.white.opacity(0.12))
+        )
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Handles drag-and-drop reordering of projects in edit mode.
+struct ProjectDropDelegate: DropDelegate {
+    let targetProject: Project
+    @Binding var projects: [Project]
+
+    func performDrop(info: DropInfo) -> Bool {
+        // Reordering is handled in dropEntered for live visual feedback.
+        true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let provider = info.itemProviders(for: [.plainText]).first else { return }
+        provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, _ in
+            guard let data = data as? Data,
+                  let sourcePath = String(data: data, encoding: .utf8) else { return }
+
+            DispatchQueue.main.async {
+                guard let sourceIndex = projects.firstIndex(where: { $0.path == sourcePath }),
+                      let targetIndex = projects.firstIndex(where: { $0.id == targetProject.id }),
+                      sourceIndex != targetIndex else { return }
+
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    let moved = projects.remove(at: sourceIndex)
+                    projects.insert(moved, at: targetIndex)
+                }
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
