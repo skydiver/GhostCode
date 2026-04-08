@@ -127,11 +127,15 @@ struct ProjectListView: View {
 
     private func editModeRow(project: Project) -> some View {
         HStack(spacing: 0) {
-            ProjectRow(project: project, isSelected: false, editing: true)
-                .onDrag {
+            ProjectRow(
+                project: project,
+                isSelected: false,
+                editing: true,
+                onDragProvider: {
                     draggingProjectPath = project.path
                     return NSItemProvider(object: project.path as NSString)
                 }
+            )
 
             Button {
                 withAnimation {
@@ -282,17 +286,21 @@ struct ProjectRow: View {
     let project: Project
     let isSelected: Bool
     var editing: Bool = false
+    var onDragProvider: (() -> NSItemProvider)?
 
     var body: some View {
-        HStack(spacing: 10) {
-            if editing {
-                Text("≡")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.5))
+        HStack(spacing: 14) {
+            if editing, let provider = onDragProvider {
+                Image(systemName: "line.horizontal.3")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 8, height: 30)
+                    .contentShape(Rectangle())
+                    .onDrag(provider)
+            } else {
+                stateIndicator
+                    .frame(width: 8, height: 8)
             }
-
-            stateIndicator
-                .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(project.name)
