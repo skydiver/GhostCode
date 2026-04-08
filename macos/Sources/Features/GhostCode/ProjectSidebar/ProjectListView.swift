@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// The left sidebar view showing the project list.
 struct ProjectListView: View {
@@ -15,6 +14,7 @@ struct ProjectListView: View {
     @State private var isEditing = false
     @State private var editingProjects: [Project] = []
     @State private var draggingProjectPath: String?
+    @State private var rowMidpoints: [String: CGFloat] = [:]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +40,8 @@ struct ProjectListView: View {
                     LazyVStack(spacing: 2) {
                         editModeList
                     }
+                    .coordinateSpace(name: "editList")
+                    .onPreferenceChange(RowMidpointKey.self) { rowMidpoints = $0 }
                 }
             } else {
                 ScrollView {
@@ -118,6 +120,8 @@ struct ProjectListView: View {
         }
     }
 
+    // MARK: - Edit Mode
+
     @ViewBuilder
     private var editModeList: some View {
         ForEach(editingProjects) { project in
@@ -126,16 +130,9 @@ struct ProjectListView: View {
     }
 
     private func editModeRow(project: Project) -> some View {
-        HStack(spacing: 0) {
-            ProjectRow(
-                project: project,
-                isSelected: false,
-                editing: true,
-                onDragProvider: {
-                    draggingProjectPath = project.path
-                    return NSItemProvider(object: project.path as NSString)
-                }
-            )
+        let isDragging = draggingProjectPath == project.path
+        return HStack(spacing: 0) {
+            ProjectRow(project: project, isSelected: false, editing: true)
 
             Button {
                 withAnimation {
@@ -149,16 +146,57 @@ struct ProjectListView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 12)
         }
-        .opacity(draggingProjectPath == project.path ? 0.4 : 1.0)
-        .onDrop(
-            of: [.plainText],
-            delegate: ProjectDropDelegate(
-                targetProject: project,
-                projects: $editingProjects,
-                draggingProjectPath: $draggingProjectPath
-            )
+        .opacity(isDragging ? 0.4 : 1.0)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: RowMidpointKey.self,
+                    value: [project.path: geo.frame(in: .named("editList")).midY]
+                )
+            }
         )
+        .overlay(alignment: .leading) {
+            // Drag gesture overlay on the handle area
+            Color.clear
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 5, coordinateSpace: .named("editList"))
+                        .onChanged { value in
+                            if draggingProjectPath == nil {
+                                draggingProjectPath = project.path
+                            }
+                            let targetIdx = indexAt(y: value.location.y)
+                            guard let srcIdx = editingProjects.firstIndex(where: { $0.path == project.path }),
+                                  srcIdx != targetIdx else { return }
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                editingProjects.move(
+                                    fromOffsets: IndexSet(integer: srcIdx),
+                                    toOffset: targetIdx > srcIdx ? targetIdx + 1 : targetIdx
+                                )
+                            }
+                        }
+                        .onEnded { _ in
+                            draggingProjectPath = nil
+                        }
+                )
+        }
     }
+
+    /// Determine the target index for a project dragged to Y position.
+    private func indexAt(y: CGFloat) -> Int {
+        let orderedMidpoints = editingProjects.compactMap { project in
+            rowMidpoints[project.path].map { (index: editingProjects.firstIndex(of: project)!, midY: $0) }
+        }.sorted { $0.midY < $1.midY }
+
+        var targetIdx = 0
+        for entry in orderedMidpoints {
+            if y > entry.midY { targetIdx = entry.index + 1 }
+        }
+        return min(max(targetIdx, 0), editingProjects.count - 1)
+    }
+
+    // MARK: - Normal Mode
 
     @ViewBuilder
     private var normalModeList: some View {
@@ -192,6 +230,8 @@ struct ProjectListView: View {
                 }
         }
     }
+
+    // MARK: - Actions
 
     private func enterEditMode() {
         editingProjects = store.projects
@@ -281,22 +321,30 @@ struct ProjectListView: View {
     }
 }
 
+// MARK: - PreferenceKey for row midpoints
+
+private struct RowMidpointKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+// MARK: - ProjectRow
+
 /// A single row in the project list.
 struct ProjectRow: View {
     let project: Project
     let isSelected: Bool
     var editing: Bool = false
-    var onDragProvider: (() -> NSItemProvider)?
 
     var body: some View {
         HStack(spacing: 14) {
-            if editing, let provider = onDragProvider {
+            if editing {
                 Image(systemName: "line.horizontal.3")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                    .frame(width: 8, height: 30)
-                    .contentShape(Rectangle())
-                    .onDrag(provider)
+                    .frame(width: 8, height: 8)
             } else {
                 stateIndicator
                     .frame(width: 8, height: 8)
@@ -363,33 +411,5 @@ struct ProjectRow: View {
         }
         if git.isDirty { return .yellow }
         return .blue
-    }
-}
-
-/// Handles drag-and-drop reordering of projects in edit mode.
-struct ProjectDropDelegate: DropDelegate {
-    let targetProject: Project
-    @Binding var projects: [Project]
-    @Binding var draggingProjectPath: String?
-
-    func dropEntered(info: DropInfo) {
-        guard let sourcePath = draggingProjectPath,
-              let sourceIndex = projects.firstIndex(where: { $0.path == sourcePath }),
-              let targetIndex = projects.firstIndex(where: { $0.id == targetProject.id }),
-              sourceIndex != targetIndex else { return }
-
-        withAnimation(.easeInOut(duration: 0.15)) {
-            let moved = projects.remove(at: sourceIndex)
-            projects.insert(moved, at: targetIndex)
-        }
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggingProjectPath = nil
-        return true
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
     }
 }
