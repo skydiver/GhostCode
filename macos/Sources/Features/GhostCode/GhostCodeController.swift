@@ -837,6 +837,21 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         refreshAllGitStatus()
+
+        // Restore focus to the active terminal surface when the window
+        // regains key status (e.g. returning from another app via Cmd+Tab
+        // or clicking the title bar). Without this the surface stays
+        // unfocused and the user has to click on the terminal to type.
+        if let window, let controller = activeTerminalController {
+            if window.firstResponder == window {
+                DispatchQueue.main.async { [weak self] in
+                    self?.transferFocusToActiveSurface(retries: 5)
+                }
+            }
+            DispatchQueue.main.async {
+                controller.syncFocusToSurfaceTree()
+            }
+        }
     }
 
     private func refreshAllGitStatus() {
