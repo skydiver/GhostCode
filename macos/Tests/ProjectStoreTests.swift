@@ -118,41 +118,6 @@ final class ProjectStoreTests: XCTestCase {
         XCTAssertNil(store.projects[0].binary)
     }
 
-    func testMoveProjectForward() {
-        store.addProject(path: "/tmp/project-a")
-        store.addProject(path: "/tmp/project-b")
-        store.addProject(path: "/tmp/project-c")
-        store.moveProject(from: 0, to: 2)
-        XCTAssertEqual(store.projects.map(\.path), [
-            "/tmp/project-b", "/tmp/project-c", "/tmp/project-a"
-        ])
-    }
-
-    func testMoveProjectBackward() {
-        store.addProject(path: "/tmp/project-a")
-        store.addProject(path: "/tmp/project-b")
-        store.addProject(path: "/tmp/project-c")
-        store.moveProject(from: 2, to: 0)
-        XCTAssertEqual(store.projects.map(\.path), [
-            "/tmp/project-c", "/tmp/project-a", "/tmp/project-b"
-        ])
-    }
-
-    func testMoveProjectSameIndex() {
-        store.addProject(path: "/tmp/project-a")
-        store.addProject(path: "/tmp/project-b")
-        store.moveProject(from: 0, to: 0)
-        XCTAssertEqual(store.projects.map(\.path), [
-            "/tmp/project-a", "/tmp/project-b"
-        ])
-    }
-
-    func testMoveProjectOutOfBounds() {
-        store.addProject(path: "/tmp/project-a")
-        store.moveProject(from: 0, to: 5)
-        XCTAssertEqual(store.projects.map(\.path), ["/tmp/project-a"])
-    }
-
     func testReplaceProjects() {
         store.addProject(path: "/tmp/project-a")
         store.addProject(path: "/tmp/project-b")

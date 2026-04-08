@@ -33,15 +33,6 @@ final class ProjectStore: ObservableObject {
         saveToDisk()
     }
 
-    func moveProject(from source: Int, to destination: Int) {
-        guard source != destination,
-              projects.indices.contains(source),
-              projects.indices.contains(destination) else { return }
-        let project = projects.remove(at: source)
-        projects.insert(project, at: destination)
-        saveToDisk()
-    }
-
     func replaceProjects(_ newProjects: [Project]) {
         // Preserve binary preferences from existing projects
         var binaryMap: [String: SupportedBinary] = [:]
