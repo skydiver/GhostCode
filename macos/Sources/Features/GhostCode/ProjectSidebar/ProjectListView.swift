@@ -14,6 +14,7 @@ struct ProjectListView: View {
 
     @State private var isEditing = false
     @State private var editingProjects: [Project] = []
+    @State private var draggingProjectPath: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,59 +35,16 @@ struct ProjectListView: View {
                         .frame(height: 1)
                 }
 
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    if isEditing {
-                        ForEach(editingProjects) { project in
-                            EditableProjectRow(
-                                project: project,
-                                onDelete: {
-                                    withAnimation {
-                                        editingProjects.removeAll { $0.id == project.id }
-                                    }
-                                }
-                            )
-                            .onDrag {
-                                NSItemProvider(object: project.path as NSString)
-                            }
-                            .onDrop(
-                                of: [.plainText],
-                                delegate: ProjectDropDelegate(
-                                    targetProject: project,
-                                    projects: $editingProjects
-                                )
-                            )
-                        }
-                    } else {
-                        ForEach(store.projects) { project in
-                            ProjectRow(project: project, isSelected: store.selectedPath == project.path)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    onSelectProject(project)
-                                }
-                                .contextMenu {
-                                    Button("Open in Finder") {
-                                        NSWorkspace.shared.selectFile(
-                                            nil,
-                                            inFileViewerRootedAtPath: project.path
-                                        )
-                                    }
-                                    Button("Copy Path") {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(
-                                            project.path,
-                                            forType: .string
-                                        )
-                                    }
-                                    if let gitHubURL = project.gitStatus?.gitHubURL {
-                                        Button("Open on GitHub") {
-                                            NSWorkspace.shared.open(gitHubURL)
-                                        }
-                                    }
-                                    Divider()
-                                    openWithMenuContent(for: project)
-                                }
-                        }
+            if isEditing {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        editModeList
+                    }
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        normalModeList
                     }
                 }
             }
@@ -157,6 +115,77 @@ struct ProjectListView: View {
         }
         .onAppear {
             refreshAllGitStatus()
+        }
+    }
+
+    @ViewBuilder
+    private var editModeList: some View {
+        ForEach(editingProjects) { project in
+            editModeRow(project: project)
+        }
+    }
+
+    private func editModeRow(project: Project) -> some View {
+        HStack(spacing: 0) {
+            ProjectRow(project: project, isSelected: false, editing: true)
+                .onDrag {
+                    draggingProjectPath = project.path
+                    return NSItemProvider(object: project.path as NSString)
+                }
+
+            Button {
+                withAnimation {
+                    editingProjects.removeAll { $0.id == project.id }
+                }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 12)
+        }
+        .opacity(draggingProjectPath == project.path ? 0.4 : 1.0)
+        .onDrop(
+            of: [.plainText],
+            delegate: ProjectDropDelegate(
+                targetProject: project,
+                projects: $editingProjects,
+                draggingProjectPath: $draggingProjectPath
+            )
+        )
+    }
+
+    @ViewBuilder
+    private var normalModeList: some View {
+        ForEach(store.projects) { project in
+            ProjectRow(project: project, isSelected: store.selectedPath == project.path)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelectProject(project)
+                }
+                .contextMenu {
+                    Button("Open in Finder") {
+                        NSWorkspace.shared.selectFile(
+                            nil,
+                            inFileViewerRootedAtPath: project.path
+                        )
+                    }
+                    Button("Copy Path") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(
+                            project.path,
+                            forType: .string
+                        )
+                    }
+                    if let gitHubURL = project.gitStatus?.gitHubURL {
+                        Button("Open on GitHub") {
+                            NSWorkspace.shared.open(gitHubURL)
+                        }
+                    }
+                    Divider()
+                    openWithMenuContent(for: project)
+                }
         }
     }
 
@@ -252,9 +281,16 @@ struct ProjectListView: View {
 struct ProjectRow: View {
     let project: Project
     let isSelected: Bool
+    var editing: Bool = false
 
     var body: some View {
         HStack(spacing: 10) {
+            if editing {
+                Text("≡")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+
             stateIndicator
                 .frame(width: 8, height: 8)
 
@@ -322,78 +358,27 @@ struct ProjectRow: View {
     }
 }
 
-/// A simplified project row shown during edit mode with drag handle and delete button.
-struct EditableProjectRow: View {
-    let project: Project
-    let onDelete: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary.opacity(0.6))
-                .frame(width: 16)
-
-            Text(project.name)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer(minLength: 0)
-
-            Button(action: onDelete) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.red)
-                    .frame(width: 22, height: 22)
-                    .background(Color.red.opacity(isHovering ? 0.2 : 0.1))
-                    .cornerRadius(4)
-            }
-            .buttonStyle(.plain)
-            .onHover { isHovering = $0 }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                .foregroundStyle(.white.opacity(0.12))
-        )
-        .padding(.horizontal, 8)
-        .contentShape(Rectangle())
-    }
-}
-
 /// Handles drag-and-drop reordering of projects in edit mode.
 struct ProjectDropDelegate: DropDelegate {
     let targetProject: Project
     @Binding var projects: [Project]
-
-    func performDrop(info: DropInfo) -> Bool {
-        // Reordering is handled in dropEntered for live visual feedback.
-        true
-    }
+    @Binding var draggingProjectPath: String?
 
     func dropEntered(info: DropInfo) {
-        guard let provider = info.itemProviders(for: [.plainText]).first else { return }
-        provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, _ in
-            guard let data = data as? Data,
-                  let sourcePath = String(data: data, encoding: .utf8) else { return }
+        guard let sourcePath = draggingProjectPath,
+              let sourceIndex = projects.firstIndex(where: { $0.path == sourcePath }),
+              let targetIndex = projects.firstIndex(where: { $0.id == targetProject.id }),
+              sourceIndex != targetIndex else { return }
 
-            DispatchQueue.main.async {
-                guard let sourceIndex = projects.firstIndex(where: { $0.path == sourcePath }),
-                      let targetIndex = projects.firstIndex(where: { $0.id == targetProject.id }),
-                      sourceIndex != targetIndex else { return }
-
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    let moved = projects.remove(at: sourceIndex)
-                    projects.insert(moved, at: targetIndex)
-                }
-            }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            let moved = projects.remove(at: sourceIndex)
+            projects.insert(moved, at: targetIndex)
         }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingProjectPath = nil
+        return true
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
