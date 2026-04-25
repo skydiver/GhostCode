@@ -299,11 +299,6 @@ struct ProjectListView: View {
         Button("Rename") {
             startRename(project)
         }
-        if project.customName != nil {
-            Button("Reset Name") {
-                store.setName(project.path, name: nil)
-            }
-        }
         if let gitHubURL = project.gitStatus?.gitHubURL {
             Button("Open on GitHub") {
                 NSWorkspace.shared.open(gitHubURL)
