@@ -125,8 +125,20 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             rootView: GhostCodeCommandPaletteView(
                 store: commandStore,
                 state: commandPaletteState,
-                onSendCommand: { [weak self] text, sendEnter in
-                    self?.sendTextToActiveTerminal(text, sendEnter: sendEnter)
+                onItemAction: { [weak self] action in
+                    guard let self else { return }
+                    switch action {
+                    case .sendText(let text, let sendEnter):
+                        self.sendTextToActiveTerminal(text, sendEnter: sendEnter)
+                    case .launchProcess(let executablePath):
+                        guard let projectPath = self.activeProjectPath else { return }
+                        ExecutableLauncher.launch(
+                            executablePath: executablePath,
+                            projectPath: projectPath
+                        ) { [weak self] path, reason in
+                            self?.presentLaunchFailure(executablePath: path, reason: reason)
+                        }
+                    }
                 }
             )
         )
@@ -813,6 +825,17 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             surfaceModel.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .press))
             surfaceModel.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .release))
         }
+    }
+
+    // MARK: - Launch Failure
+
+    private func presentLaunchFailure(executablePath: String, reason: String) {
+        let alert = NSAlert()
+        alert.messageText = "Could not launch app"
+        alert.informativeText = "\(executablePath)\n\n\(reason)"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     // MARK: - Sidebar Toggles

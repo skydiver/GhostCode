@@ -277,10 +277,6 @@ struct ProjectListView: View {
         }
     }
 
-    private func isAppInstalled(_ bundleID: String) -> Bool {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
-    }
-
     @ViewBuilder
     private func projectContextMenu(for project: Project) -> some View {
         Button("Open in Finder") {
@@ -304,47 +300,6 @@ struct ProjectListView: View {
                 NSWorkspace.shared.open(gitHubURL)
             }
         }
-        Divider()
-        openWithMenuContent(for: project)
-    }
-
-    @ViewBuilder
-    private func openWithMenuContent(for project: Project) -> some View {
-        let hasGhostty = isAppInstalled("com.mitchellh.ghostty")
-        let hasVSCode = isAppInstalled("com.microsoft.VSCode")
-        let hasTower = project.gitStatus != nil && isAppInstalled("com.fournova.Tower3")
-
-        if hasGhostty || hasVSCode || hasTower {
-            Menu("Open in") {
-                if hasGhostty {
-                    Button("Ghostty") {
-                        openWith("com.mitchellh.ghostty", path: project.path)
-                    }
-                }
-                if hasVSCode {
-                    Button("Visual Studio Code") {
-                        openWith("com.microsoft.VSCode", path: project.path)
-                    }
-                }
-                if hasTower {
-                    Button("Tower") {
-                        openWith("com.fournova.Tower3", path: project.path)
-                    }
-                }
-            }
-        }
-    }
-
-    private func openWith(_ bundleID: String, path: String) {
-        guard let appURL = NSWorkspace.shared.urlForApplication(
-            withBundleIdentifier: bundleID
-        ) else { return }
-        let url = URL(fileURLWithPath: path)
-        NSWorkspace.shared.open(
-            [url],
-            withApplicationAt: appURL,
-            configuration: NSWorkspace.OpenConfiguration()
-        )
     }
 
 }

@@ -4,7 +4,7 @@ import SwiftUI
 struct GhostCodeCommandPaletteView: View {
     @ObservedObject var store: CommandStore
     @ObservedObject var state: CommandPaletteState
-    let onSendCommand: (String, Bool) -> Void
+    let onItemAction: (CommandItem.Action) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,7 +13,7 @@ struct GhostCodeCommandPaletteView: View {
                     ForEach(store.sections) { section in
                         CommandSectionView(
                             section: section,
-                            onSendCommand: onSendCommand
+                            onItemAction: onItemAction
                         )
                     }
                 }
@@ -51,7 +51,7 @@ struct GhostCodeCommandPaletteView: View {
 /// A single section of command buttons.
 struct CommandSectionView: View {
     let section: CommandSection
-    let onSendCommand: (String, Bool) -> Void
+    let onItemAction: (CommandItem.Action) -> Void
 
     @State private var isCollapsed = false
 
@@ -89,7 +89,7 @@ struct CommandSectionView: View {
                         FlowLayout(spacing: 6) {
                             ForEach(section.items) { item in
                                 CommandButton(item: item) {
-                                    onSendCommand(item.text, item.shouldAutoSend)
+                                    if let action = item.action { onItemAction(action) }
                                 }
                             }
                         }
@@ -97,7 +97,19 @@ struct CommandSectionView: View {
                         VStack(spacing: 6) {
                             ForEach(section.items) { item in
                                 CommandButton(item: item, fullWidth: true) {
-                                    onSendCommand(item.text, item.shouldAutoSend)
+                                    if let action = item.action { onItemAction(action) }
+                                }
+                            }
+                        }
+                    case .tiles:
+                        let columns = [
+                            GridItem(.flexible(), spacing: 6),
+                            GridItem(.flexible(), spacing: 6)
+                        ]
+                        LazyVGrid(columns: columns, spacing: 6) {
+                            ForEach(section.items) { item in
+                                CommandTile(item: item) {
+                                    if let action = item.action { onItemAction(action) }
                                 }
                             }
                         }
@@ -135,8 +147,8 @@ struct CommandButton: View {
                            design: item.label.hasPrefix("/") ? .monospaced : .default))
                     .foregroundStyle(.primary)
 
-                if !item.label.hasPrefix("/") && item.text != item.label {
-                    Text(item.text)
+                if let text = item.text, !item.label.hasPrefix("/"), text != item.label {
+                    Text(text)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -159,6 +171,39 @@ struct CommandButton: View {
             isHovered = hovering
         }
         .instantTooltip(item.tooltip)
+    }
+}
+
+/// A single app-launcher tile. Fixed height, name centered, used in `tiles` layout.
+struct CommandTile: View {
+    let item: CommandItem
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(item.label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 8)
+                .background(Color.primary.opacity(isHovered ? 0.06 : 0))
+                .clipShape(.rect(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.primary.opacity(isHovered ? 0.25 : 0.1), lineWidth: 1)
+                )
+                .animation(.easeInOut(duration: 0.15), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .frame(height: 56)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .instantTooltip(item.tooltip ?? item.executable)
     }
 }
 
