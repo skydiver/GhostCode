@@ -219,34 +219,7 @@ struct ProjectListView: View {
                 onSelectProject(project)
             }
             .contextMenu {
-                Button("Open in Finder") {
-                    NSWorkspace.shared.selectFile(
-                        nil,
-                        inFileViewerRootedAtPath: project.path
-                    )
-                }
-                Button("Copy Path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(
-                        project.path,
-                        forType: .string
-                    )
-                }
-                Button("Rename") {
-                    startRename(project)
-                }
-                if project.customName != nil {
-                    Button("Reset Name") {
-                        store.setName(project.path, name: nil)
-                    }
-                }
-                if let gitHubURL = project.gitStatus?.gitHubURL {
-                    Button("Open on GitHub") {
-                        NSWorkspace.shared.open(gitHubURL)
-                    }
-                }
-                Divider()
-                openWithMenuContent(for: project)
+                projectContextMenu(for: project)
             }
         }
     }
@@ -263,6 +236,8 @@ struct ProjectListView: View {
     }
 
     private func commitRename() {
+        // Pressing Esc clears renamingPath via cancelRename, which removes the
+        // TextField and triggers a spurious focus-loss commit. The guard absorbs it.
         guard let path = renamingPath else { return }
         store.setName(path, name: renameBuffer)
         renamingPath = nil
@@ -304,6 +279,38 @@ struct ProjectListView: View {
 
     private func isAppInstalled(_ bundleID: String) -> Bool {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+
+    @ViewBuilder
+    private func projectContextMenu(for project: Project) -> some View {
+        Button("Open in Finder") {
+            NSWorkspace.shared.selectFile(
+                nil,
+                inFileViewerRootedAtPath: project.path
+            )
+        }
+        Button("Copy Path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(
+                project.path,
+                forType: .string
+            )
+        }
+        Button("Rename") {
+            startRename(project)
+        }
+        if project.customName != nil {
+            Button("Reset Name") {
+                store.setName(project.path, name: nil)
+            }
+        }
+        if let gitHubURL = project.gitStatus?.gitHubURL {
+            Button("Open on GitHub") {
+                NSWorkspace.shared.open(gitHubURL)
+            }
+        }
+        Divider()
+        openWithMenuContent(for: project)
     }
 
     @ViewBuilder
