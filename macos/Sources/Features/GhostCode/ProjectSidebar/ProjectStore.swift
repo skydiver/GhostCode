@@ -4,6 +4,7 @@ import Combine
 /// On-disk representation of a project entry with optional binary preference.
 private struct ProjectEntry: Codable {
     let path: String
+    var name: String?
     var binary: SupportedBinary?
 }
 
@@ -35,20 +36,29 @@ final class ProjectStore: ObservableObject {
     }
 
     func replaceProjects(_ newProjects: [Project]) {
-        // Preserve binary preferences from existing projects
+        // Preserve binary and customName from existing projects
         var binaryMap: [String: SupportedBinary] = [:]
+        var nameMap: [String: String] = [:]
         for project in projects {
             if let binary = project.binary {
                 binaryMap[project.path] = binary
             }
+            if let custom = project.customName {
+                nameMap[project.path] = custom
+            }
         }
 
         projects = newProjects.map { project in
-            var updated = project
-            if updated.binary == nil, let binary = binaryMap[project.path] {
-                updated.binary = binary
-            }
-            return updated
+            let binary = project.binary ?? binaryMap[project.path]
+            let customName = project.customName ?? nameMap[project.path]
+            var rebuilt = Project(
+                path: project.path,
+                customName: customName,
+                state: project.state,
+                binary: binary
+            )
+            rebuilt.gitStatus = project.gitStatus
+            return rebuilt
         }
         saveToDisk()
     }
@@ -110,6 +120,21 @@ final class ProjectStore: ObservableObject {
         saveToDisk()
     }
 
+    func setName(_ path: String, name: String?) {
+        guard let index = projects.firstIndex(where: { $0.path == path }) else { return }
+        let existing = projects[index]
+        var rebuilt = Project(
+            path: existing.path,
+            customName: name,
+            state: existing.state,
+            binary: existing.binary
+        )
+        // Preserve git status (initializer doesn't take it)
+        rebuilt.gitStatus = existing.gitStatus
+        projects[index] = rebuilt
+        saveToDisk()
+    }
+
     func project(forPath path: String) -> Project? {
         projects.first { $0.path == path }
     }
@@ -137,7 +162,9 @@ final class ProjectStore: ObservableObject {
 
         // Try new format: [ProjectEntry]
         if let entries = try? JSONC.decode([ProjectEntry].self, from: data) {
-            projects = entries.map { Project(path: $0.path, binary: $0.binary) }
+            projects = entries.map {
+                Project(path: $0.path, customName: $0.name, binary: $0.binary)
+            }
             return
         }
 
@@ -148,7 +175,13 @@ final class ProjectStore: ObservableObject {
     }
 
     private func saveToDisk() {
-        let entries = projects.map { ProjectEntry(path: $0.path, binary: $0.binary) }
+        let entries = projects.map { project in
+            ProjectEntry(
+                path: project.path,
+                name: project.customName,
+                binary: project.binary
+            )
+        }
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: URL(fileURLWithPath: filePath), options: .atomic)
     }

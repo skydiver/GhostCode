@@ -160,4 +160,91 @@ final class ProjectStoreTests: XCTestCase {
 
         XCTAssertEqual(store.projects[1].binary, .codex)
     }
+
+    // MARK: - Custom Name
+
+    func testSetNameStoresOverride() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "My Foo")
+        XCTAssertEqual(store.projects[0].customName, "My Foo")
+        XCTAssertEqual(store.projects[0].name, "My Foo")
+    }
+
+    func testSetNameTrimsWhitespace() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "  Spaced Out   ")
+        XCTAssertEqual(store.projects[0].customName, "Spaced Out")
+    }
+
+    func testSetNameEmptyResetsToFolder() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "Custom")
+        store.setName("/tmp/project-a", name: "")
+        XCTAssertNil(store.projects[0].customName)
+        XCTAssertEqual(store.projects[0].name, "project-a")
+    }
+
+    func testSetNameWhitespaceOnlyResetsToFolder() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "Custom")
+        store.setName("/tmp/project-a", name: "   ")
+        XCTAssertNil(store.projects[0].customName)
+    }
+
+    func testSetNameNilResetsToFolder() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "Custom")
+        store.setName("/tmp/project-a", name: nil)
+        XCTAssertNil(store.projects[0].customName)
+        XCTAssertEqual(store.projects[0].name, "project-a")
+    }
+
+    func testSetNameEqualToFolderStoresNil() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "project-a")
+        XCTAssertNil(store.projects[0].customName)
+    }
+
+    func testSetNameForUnknownPathIsNoOp() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/nonexistent", name: "Something")
+        XCTAssertNil(store.projects[0].customName)
+    }
+
+    func testCustomNamePersists() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "Persisted Name")
+
+        let reloaded = ProjectStore(filePath: tempFile.path)
+        XCTAssertEqual(reloaded.projects[0].customName, "Persisted Name")
+        XCTAssertEqual(reloaded.projects[0].name, "Persisted Name")
+    }
+
+    func testReplaceProjectsPreservesCustomName() {
+        store.addProject(path: "/tmp/project-a")
+        store.setName("/tmp/project-a", name: "Alpha")
+        store.addProject(path: "/tmp/project-b")
+
+        let reordered = [
+            Project(path: "/tmp/project-b"),
+            Project(path: "/tmp/project-a"),
+        ]
+        store.replaceProjects(reordered)
+
+        XCTAssertEqual(store.projects[1].customName, "Alpha")
+        XCTAssertEqual(store.projects[1].name, "Alpha")
+    }
+
+    func testLegacyEntryWithoutNameDecodes() throws {
+        let json = """
+        [{"path": "/tmp/project-a", "binary": "claude"}]
+        """
+        try json.data(using: .utf8)!.write(to: tempFile)
+
+        let migrated = ProjectStore(filePath: tempFile.path)
+        XCTAssertEqual(migrated.projects.count, 1)
+        XCTAssertEqual(migrated.projects[0].path, "/tmp/project-a")
+        XCTAssertNil(migrated.projects[0].customName)
+        XCTAssertEqual(migrated.projects[0].name, "project-a")
+    }
 }
