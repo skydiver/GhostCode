@@ -5,6 +5,7 @@ struct Project: Identifiable, Equatable {
     let id: String
     let path: String
     let name: String
+    let customName: String?
     var state: State
     var gitStatus: GitStatus?
     var binary: SupportedBinary?
@@ -57,10 +58,23 @@ struct Project: Identifiable, Equatable {
         }
     }
 
-    init(path: String, state: State = .inactive, binary: SupportedBinary? = nil) {
+    init(
+        path: String,
+        customName: String? = nil,
+        state: State = .inactive,
+        binary: SupportedBinary? = nil
+    ) {
         self.id = path
         self.path = path
-        self.name = URL(fileURLWithPath: path).lastPathComponent
+        let trimmed = customName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let folderName = URL(fileURLWithPath: path).lastPathComponent
+        if trimmed.isEmpty || trimmed == folderName {
+            self.customName = nil
+            self.name = folderName
+        } else {
+            self.customName = trimmed
+            self.name = trimmed
+        }
         self.state = state
         self.binary = binary
     }
