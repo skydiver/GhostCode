@@ -16,6 +16,10 @@ struct ProjectListView: View {
     @State private var draggingProjectPath: String?
     @State private var rowMidpoints: [String: CGFloat] = [:]
 
+    @State private var renamingPath: String?
+    @State private var renameBuffer: String = ""
+    @FocusState private var renameFieldFocused: Bool
+
     var body: some View {
         VStack(spacing: 0) {
             Text("Projects")
@@ -201,37 +205,74 @@ struct ProjectListView: View {
     @ViewBuilder
     private var normalModeList: some View {
         ForEach(store.projects) { project in
-            ProjectRow(project: project, isSelected: store.selectedPath == project.path)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onSelectProject(project)
+            ProjectRow(
+                project: project,
+                isSelected: store.selectedPath == project.path,
+                renameText: renamingPath == project.path ? $renameBuffer : nil,
+                renameFocus: $renameFieldFocused,
+                onRenameCommit: commitRename,
+                onRenameCancel: cancelRename
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if renamingPath == project.path { return }
+                onSelectProject(project)
+            }
+            .contextMenu {
+                Button("Open in Finder") {
+                    NSWorkspace.shared.selectFile(
+                        nil,
+                        inFileViewerRootedAtPath: project.path
+                    )
                 }
-                .contextMenu {
-                    Button("Open in Finder") {
-                        NSWorkspace.shared.selectFile(
-                            nil,
-                            inFileViewerRootedAtPath: project.path
-                        )
-                    }
-                    Button("Copy Path") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(
-                            project.path,
-                            forType: .string
-                        )
-                    }
-                    if let gitHubURL = project.gitStatus?.gitHubURL {
-                        Button("Open on GitHub") {
-                            NSWorkspace.shared.open(gitHubURL)
-                        }
-                    }
-                    Divider()
-                    openWithMenuContent(for: project)
+                Button("Copy Path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(
+                        project.path,
+                        forType: .string
+                    )
                 }
+                Button("Rename") {
+                    startRename(project)
+                }
+                if project.customName != nil {
+                    Button("Reset Name") {
+                        store.setName(project.path, name: nil)
+                    }
+                }
+                if let gitHubURL = project.gitStatus?.gitHubURL {
+                    Button("Open on GitHub") {
+                        NSWorkspace.shared.open(gitHubURL)
+                    }
+                }
+                Divider()
+                openWithMenuContent(for: project)
+            }
         }
     }
 
     // MARK: - Actions
+
+    private func startRename(_ project: Project) {
+        renameBuffer = project.name
+        renamingPath = project.path
+        // Defer focus so the TextField is in the view tree first.
+        DispatchQueue.main.async {
+            renameFieldFocused = true
+        }
+    }
+
+    private func commitRename() {
+        guard let path = renamingPath else { return }
+        store.setName(path, name: renameBuffer)
+        renamingPath = nil
+        renameBuffer = ""
+    }
+
+    private func cancelRename() {
+        renamingPath = nil
+        renameBuffer = ""
+    }
 
     private func enterEditMode() {
         editingProjects = store.projects
@@ -323,6 +364,11 @@ struct ProjectRow: View {
     let isSelected: Bool
     var editing: Bool = false
 
+    var renameText: Binding<String>? = nil
+    var renameFocus: FocusState<Bool>.Binding? = nil
+    var onRenameCommit: () -> Void = {}
+    var onRenameCancel: () -> Void = {}
+
     var body: some View {
         HStack(spacing: 14) {
             if editing {
@@ -336,11 +382,26 @@ struct ProjectRow: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(project.name)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                if let renameText = renameText, let renameFocus = renameFocus {
+                    TextField("", text: renameText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .focused(renameFocus)
+                        .onSubmit { onRenameCommit() }
+                        .onExitCommand { onRenameCancel() }
+                        .onChange(of: renameFocus.wrappedValue) { newValue in
+                            if !newValue {
+                                onRenameCommit()
+                            }
+                        }
+                } else {
+                    Text(project.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
 
                 if let git = project.gitStatus {
                     HStack(spacing: 6) {
