@@ -139,29 +139,52 @@ struct CommandButton: View {
 
     @State private var isHovered = false
 
+    private var iconView: some View {
+        Group {
+            if let icon = item.icon {
+                CommandIcon(name: icon, size: 12)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14)
+            }
+        }
+    }
+
+    private var labelStack: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.label)
+                .font(.system(size: 13, weight: .medium,
+                       design: item.label.hasPrefix("/") ? .monospaced : .default))
+                .foregroundStyle(.primary)
+
+            if let text = item.text, !item.label.hasPrefix("/"), text != item.label {
+                Text(text)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        // Resolution clamps top/bottom to .left for flow/list, so this is
+        // effectively a two-case switch.
+        switch item.resolvedIconPosition(for: .flow) {
+        case .right:
+            HStack(spacing: 8) {
+                labelStack
+                if item.icon != nil, fullWidth { Spacer(minLength: 8) }
+                iconView
+            }
+        default:
+            HStack(spacing: 8) { iconView; labelStack }
+        }
+    }
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                if let icon = item.icon {
-                    CommandIcon(name: icon, size: 12)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 14)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.label)
-                        .font(.system(size: 13, weight: .medium,
-                               design: item.label.hasPrefix("/") ? .monospaced : .default))
-                        .foregroundStyle(.primary)
-
-                    if let text = item.text, !item.label.hasPrefix("/"), text != item.label {
-                        Text(text)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-            }
+            content
             .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -188,19 +211,40 @@ struct CommandTile: View {
 
     @State private var isHovered = false
 
+    private var iconView: some View {
+        Group {
+            if let icon = item.icon {
+                CommandIcon(name: icon, size: 18)
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    private var labelView: some View {
+        Text(item.label)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch item.resolvedIconPosition(for: .tiles) {
+        case .top:
+            VStack(spacing: 4) { iconView; labelView }
+        case .bottom:
+            VStack(spacing: 4) { labelView; iconView }
+        case .left:
+            HStack(spacing: 6) { iconView; labelView }
+        case .right:
+            HStack(spacing: 6) { labelView; iconView }
+        }
+    }
+
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                if let icon = item.icon {
-                    CommandIcon(name: icon, size: 18)
-                        .foregroundStyle(.primary)
-                }
-                Text(item.label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+            content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 8)
             .background(Color.primary.opacity(isHovered ? 0.06 : 0))

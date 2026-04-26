@@ -1,6 +1,13 @@
 import Foundation
 import AppKit
 
+/// Where the icon sits relative to the label.
+/// In tile layout all four positions are honored. In flow/list only `left` and
+/// `right` apply — `top` and `bottom` fall back to the layout's default (`left`).
+enum IconPosition: String, Codable {
+    case top, bottom, left, right
+}
+
 /// A single command button in the palette.
 struct CommandItem: Codable, Identifiable {
     var id: String { "\(label)|\(text ?? "")|\(executable ?? "")" }
@@ -10,6 +17,7 @@ struct CommandItem: Codable, Identifiable {
     let tooltip: String?
     let autoSend: Bool?
     let icon: String?
+    let iconPosition: IconPosition?
 
     /// Whether to send Enter after the text. Defaults to false.
     var shouldAutoSend: Bool { autoSend ?? false }
@@ -27,17 +35,19 @@ struct CommandItem: Codable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case label, text, executable, tooltip, autoSend, icon
+        case label, text, executable, tooltip, autoSend, icon, iconPosition
     }
 
     init(label: String, text: String?, executable: String? = nil,
-         tooltip: String? = nil, autoSend: Bool? = nil, icon: String? = nil) {
+         tooltip: String? = nil, autoSend: Bool? = nil,
+         icon: String? = nil, iconPosition: IconPosition? = nil) {
         self.label = label
         self.text = text
         self.executable = executable
         self.tooltip = tooltip
         self.autoSend = autoSend
         self.icon = icon
+        self.iconPosition = iconPosition
     }
 
     init(from decoder: Decoder) throws {
@@ -48,6 +58,7 @@ struct CommandItem: Codable, Identifiable {
         self.tooltip = try container.decodeIfPresent(String.self, forKey: .tooltip)
         self.autoSend = try container.decodeIfPresent(Bool.self, forKey: .autoSend)
         self.icon = try container.decodeIfPresent(String.self, forKey: .icon)
+        self.iconPosition = try container.decodeIfPresent(IconPosition.self, forKey: .iconPosition)
 
         // Validation: exactly one of text/executable.
         switch (text, executable) {
@@ -71,6 +82,21 @@ struct CommandItem: Codable, Identifiable {
                 forKey: .executable, in: container,
                 debugDescription: "Item '\(label)' executable '\(exec)' must be an absolute path (start with '/')."
             )
+        }
+    }
+
+    /// Resolves the effective icon position for the section's layout.
+    /// Tiles honor all four positions (default `top`); flow and list honor
+    /// only `left` / `right` (default `left`) and silently ignore `top` / `bottom`.
+    func resolvedIconPosition(for layout: SectionLayout) -> IconPosition {
+        switch layout {
+        case .tiles:
+            return iconPosition ?? .top
+        case .flow, .list:
+            switch iconPosition {
+            case .left, .right: return iconPosition!
+            case .top, .bottom, .none: return .left
+            }
         }
     }
 }
@@ -227,6 +253,10 @@ final class CommandStore: ObservableObject {
         //                          Generate a base64 SVG with:
         //                            echo "data:image/svg+xml;base64,$(base64 < icon.svg)"
         //                          Invalid names or malformed base64 render nothing.
+        //       iconPosition (optional) — Where to place the icon relative to the label.
+        //                          tiles layout: "top" (default), "bottom", "left", "right".
+        //                          flow/list layouts: "left" (default), "right".
+        //                          ("top" and "bottom" are ignored in flow/list.)
         "sections": [
             {
                 "name": "Slash Commands",

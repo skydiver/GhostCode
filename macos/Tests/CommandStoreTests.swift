@@ -202,6 +202,94 @@ final class CommandStoreTests: XCTestCase {
         XCTAssertNil(store.sections[0].items[0].icon)
     }
 
+    // MARK: - Icon position field
+
+    func testIconPositionDecodesAllFourValues() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Apps",
+              "layout": "tiles",
+              "items": [
+                { "label": "Top",    "executable": "/bin/echo", "iconPosition": "top" },
+                { "label": "Bottom", "executable": "/bin/echo", "iconPosition": "bottom" },
+                { "label": "Left",   "executable": "/bin/echo", "iconPosition": "left" },
+                { "label": "Right",  "executable": "/bin/echo", "iconPosition": "right" }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertEqual(store.sections[0].items[0].iconPosition, .top)
+        XCTAssertEqual(store.sections[0].items[1].iconPosition, .bottom)
+        XCTAssertEqual(store.sections[0].items[2].iconPosition, .left)
+        XCTAssertEqual(store.sections[0].items[3].iconPosition, .right)
+    }
+
+    func testIconPositionIsNilWhenAbsent() throws {
+        let json = """
+        {
+          "sections": [
+            { "name": "Apps", "items": [ { "label": "A", "text": "a" } ] }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertNil(store.sections[0].items[0].iconPosition)
+    }
+
+    // MARK: - resolvedIconPosition(for:)
+
+    func testTilesDefaultPositionIsTop() {
+        let item = CommandItem(label: "X", text: "x")
+        XCTAssertEqual(item.resolvedIconPosition(for: .tiles), .top)
+    }
+
+    func testTilesHonorAllFourPositions() {
+        for pos in [IconPosition.top, .bottom, .left, .right] {
+            let item = CommandItem(label: "X", text: "x", iconPosition: pos)
+            XCTAssertEqual(item.resolvedIconPosition(for: .tiles), pos)
+        }
+    }
+
+    func testFlowDefaultPositionIsLeft() {
+        let item = CommandItem(label: "X", text: "x")
+        XCTAssertEqual(item.resolvedIconPosition(for: .flow), .left)
+    }
+
+    func testFlowHonorsRight() {
+        let item = CommandItem(label: "X", text: "x", iconPosition: .right)
+        XCTAssertEqual(item.resolvedIconPosition(for: .flow), .right)
+    }
+
+    func testFlowIgnoresTopAndBottom() {
+        for pos in [IconPosition.top, .bottom] {
+            let item = CommandItem(label: "X", text: "x", iconPosition: pos)
+            XCTAssertEqual(item.resolvedIconPosition(for: .flow), .left,
+                           "\(pos) should fall back to .left in flow layout")
+        }
+    }
+
+    func testListDefaultPositionIsLeft() {
+        let item = CommandItem(label: "X", text: "x")
+        XCTAssertEqual(item.resolvedIconPosition(for: .list), .left)
+    }
+
+    func testListIgnoresTopAndBottom() {
+        for pos in [IconPosition.top, .bottom] {
+            let item = CommandItem(label: "X", text: "x", iconPosition: pos)
+            XCTAssertEqual(item.resolvedIconPosition(for: .list), .left,
+                           "\(pos) should fall back to .left in list layout")
+        }
+    }
+
+    func testListHonorsRight() {
+        let item = CommandItem(label: "X", text: "x", iconPosition: .right)
+        XCTAssertEqual(item.resolvedIconPosition(for: .list), .right)
+    }
+
     func testDefaultJSONCTemplateIsValid() throws {
         // Forces creation of the bundled default file in a clean temp dir,
         // then verifies it parses without errors and produces the expected sections.
