@@ -224,39 +224,17 @@ final class CommandStore: ObservableObject {
 
     private static let defaultJSONC = """
     {
-        // GhostCode Command Palette Configuration
+        // GhostCode Command Palette
+        // Full reference: https://github.com/skydiver/GhostCode/blob/main/docs/customizations.md
         //
-        // This file defines the buttons shown in the command palette sidebar.
-        // Changes are picked up automatically — no need to restart the app.
+        // Quick schema:
+        //   sections[]: { name, layout?: "flow"|"list"|"tiles", items[] }
+        //   items[]:    { label, text? | executable?, tooltip?, autoSend?, icon?, iconPosition? }
         //
-        // Structure:
-        //   sections[]           — Array of section groups displayed top to bottom.
-        //     name               — Section heading shown in the sidebar.
-        //     layout (optional)  — "flow" (default): compact, wrapping chip buttons.
-        //                          "list": full-width, stacked rows (better for longer labels).
-        //                          "tiles": 2-column grid of fixed-height rectangles, ideal for app launchers.
-        //     items[]            — Array of command buttons within the section.
-        //       label            — Button text shown in the palette.
-        //       text             — (For text items) The text sent to the terminal when clicked.
-        //                          Can be a slash command (e.g. "/commit") or a free-form
-        //                          prompt (e.g. "explain this function").
-        //       executable       — (For app-launcher items) Absolute path to a binary or app.
-        //                          Clicked tile spawns: <executable> <project_path>
-        //                          Mutually exclusive with `text` — use exactly one per item.
-        //       tooltip (optional) — Hover tooltip text shown on the button or tile.
-        //       autoSend (optional) — Whether to press Enter after sending. Defaults to false.
-        //                          Only meaningful for `text` items.
-        //       icon (optional)    — Either an SF Symbol name (e.g. "hammer.fill")
-        //                          or a base64-encoded SVG data URI:
-        //                            "data:image/svg+xml;base64,PHN2Zy4uLg=="
-        //                          Browse SF Symbol names with macOS's "SF Symbols" app.
-        //                          Generate a base64 SVG with:
-        //                            echo "data:image/svg+xml;base64,$(base64 < icon.svg)"
-        //                          Invalid names or malformed base64 render nothing.
-        //       iconPosition (optional) — Where to place the icon relative to the label.
-        //                          tiles layout: "top" (default), "bottom", "left", "right".
-        //                          flow/list layouts: "left" (default), "right".
-        //                          ("top" and "bottom" are ignored in flow/list.)
+        // - Use exactly one of `text` (sent to terminal) or `executable` (absolute path, spawned with project path).
+        // - `icon`: SF Symbol name (e.g. "hammer.fill") or "data:image/svg+xml;base64,...".
+        // - `iconPosition`: tiles → top|bottom|left|right (default top); flow/list → left|right (default left).
+        // - Saves reload automatically. A validation error empties the palette until fixed.
         "sections": [
             {
                 "name": "Slash Commands",
