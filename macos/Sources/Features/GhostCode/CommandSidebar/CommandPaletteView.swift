@@ -143,8 +143,7 @@ struct CommandButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let icon = item.icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .regular))
+                    CommandIcon(name: icon, size: 12)
                         .foregroundStyle(.secondary)
                         .frame(width: 14)
                 }
@@ -193,8 +192,7 @@ struct CommandTile: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 if let icon = item.icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .regular))
+                    CommandIcon(name: icon, size: 18)
                         .foregroundStyle(.primary)
                 }
                 Text(item.label)

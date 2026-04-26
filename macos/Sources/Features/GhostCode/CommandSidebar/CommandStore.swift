@@ -220,9 +220,13 @@ final class CommandStore: ObservableObject {
         //       tooltip (optional) — Hover tooltip text shown on the button or tile.
         //       autoSend (optional) — Whether to press Enter after sending. Defaults to false.
         //                          Only meaningful for `text` items.
-        //       icon (optional)    — SF Symbol name (e.g. "hammer.fill", "doc.text").
-        //                          Browse names with macOS's "SF Symbols" app.
-        //                          Invalid names render nothing.
+        //       icon (optional)    — Either an SF Symbol name (e.g. "hammer.fill")
+        //                          or a base64-encoded SVG data URI:
+        //                            "data:image/svg+xml;base64,PHN2Zy4uLg=="
+        //                          Browse SF Symbol names with macOS's "SF Symbols" app.
+        //                          Generate a base64 SVG with:
+        //                            echo "data:image/svg+xml;base64,$(base64 < icon.svg)"
+        //                          Invalid names or malformed base64 render nothing.
         "sections": [
             {
                 "name": "Slash Commands",
