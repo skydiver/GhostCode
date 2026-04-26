@@ -9,6 +9,7 @@ struct CommandItem: Codable, Identifiable {
     let executable: String?
     let tooltip: String?
     let autoSend: Bool?
+    let icon: String?
 
     /// Whether to send Enter after the text. Defaults to false.
     var shouldAutoSend: Bool { autoSend ?? false }
@@ -26,16 +27,17 @@ struct CommandItem: Codable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case label, text, executable, tooltip, autoSend
+        case label, text, executable, tooltip, autoSend, icon
     }
 
     init(label: String, text: String?, executable: String? = nil,
-         tooltip: String? = nil, autoSend: Bool? = nil) {
+         tooltip: String? = nil, autoSend: Bool? = nil, icon: String? = nil) {
         self.label = label
         self.text = text
         self.executable = executable
         self.tooltip = tooltip
         self.autoSend = autoSend
+        self.icon = icon
     }
 
     init(from decoder: Decoder) throws {
@@ -45,6 +47,7 @@ struct CommandItem: Codable, Identifiable {
         self.executable = try container.decodeIfPresent(String.self, forKey: .executable)
         self.tooltip = try container.decodeIfPresent(String.self, forKey: .tooltip)
         self.autoSend = try container.decodeIfPresent(Bool.self, forKey: .autoSend)
+        self.icon = try container.decodeIfPresent(String.self, forKey: .icon)
 
         // Validation: exactly one of text/executable.
         switch (text, executable) {
@@ -217,6 +220,9 @@ final class CommandStore: ObservableObject {
         //       tooltip (optional) — Hover tooltip text shown on the button or tile.
         //       autoSend (optional) — Whether to press Enter after sending. Defaults to false.
         //                          Only meaningful for `text` items.
+        //       icon (optional)    — SF Symbol name (e.g. "hammer.fill", "doc.text").
+        //                          Browse names with macOS's "SF Symbols" app.
+        //                          Invalid names render nothing.
         "sections": [
             {
                 "name": "Slash Commands",

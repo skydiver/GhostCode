@@ -141,18 +141,26 @@ struct CommandButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.label)
-                    .font(.system(size: 13, weight: .medium,
-                           design: item.label.hasPrefix("/") ? .monospaced : .default))
-                    .foregroundStyle(.primary)
-
-                if let text = item.text, !item.label.hasPrefix("/"), text != item.label {
-                    Text(text)
-                        .font(.system(size: 11, design: .monospaced))
+            HStack(spacing: 8) {
+                if let icon = item.icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .frame(width: 14)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.label)
+                        .font(.system(size: 13, weight: .medium,
+                               design: item.label.hasPrefix("/") ? .monospaced : .default))
+                        .foregroundStyle(.primary)
+
+                    if let text = item.text, !item.label.hasPrefix("/"), text != item.label {
+                        Text(text)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
             }
             .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
@@ -183,20 +191,27 @@ struct CommandTile: View {
 
     var body: some View {
         Button(action: action) {
-            Text(item.label)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 8)
-                .background(Color.primary.opacity(isHovered ? 0.06 : 0))
-                .clipShape(.rect(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.primary.opacity(isHovered ? 0.25 : 0.1), lineWidth: 1)
-                )
-                .animation(.easeInOut(duration: 0.15), value: isHovered)
+            VStack(spacing: 4) {
+                if let icon = item.icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(.primary)
+                }
+                Text(item.label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 8)
+            .background(Color.primary.opacity(isHovered ? 0.06 : 0))
+            .clipShape(.rect(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.primary.opacity(isHovered ? 0.25 : 0.1), lineWidth: 1)
+            )
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
         }
         .buttonStyle(.plain)
         .frame(height: 56)

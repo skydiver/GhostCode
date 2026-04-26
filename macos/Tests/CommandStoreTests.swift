@@ -165,6 +165,43 @@ final class CommandStoreTests: XCTestCase {
                       "Should fail to load when executable is not an absolute path")
     }
 
+    // MARK: - Icon field
+
+    func testItemDecodesIconFieldWhenPresent() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Apps",
+              "layout": "tiles",
+              "items": [
+                { "label": "VSCode", "executable": "/usr/local/bin/code", "icon": "hammer.fill" }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertEqual(store.sections[0].items[0].icon, "hammer.fill")
+    }
+
+    func testItemIconIsNilWhenAbsent() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Commands",
+              "items": [
+                { "label": "/commit", "text": "/commit" }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertNil(store.sections[0].items[0].icon)
+    }
+
     func testDefaultJSONCTemplateIsValid() throws {
         // Forces creation of the bundled default file in a clean temp dir,
         // then verifies it parses without errors and produces the expected sections.
