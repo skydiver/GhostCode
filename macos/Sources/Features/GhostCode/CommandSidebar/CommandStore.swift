@@ -10,10 +10,11 @@ enum IconPosition: String, Codable {
 
 /// A single command button in the palette.
 struct CommandItem: Codable, Identifiable {
-    var id: String { "\(label)|\(text ?? "")|\(executable ?? "")" }
+    var id: String { "\(label)|\(text ?? "")|\(executable ?? "")|\(arguments?.joined(separator: " ") ?? "")" }
     let label: String
     let text: String?
     let executable: String?
+    let arguments: [String]?
     let tooltip: String?
     let autoSend: Bool?
     let icon: String?
@@ -25,25 +26,27 @@ struct CommandItem: Codable, Identifiable {
     /// Click behavior for this item.
     enum Action {
         case sendText(String, autoSend: Bool)
-        case launchProcess(executablePath: String)
+        case launchProcess(executablePath: String, arguments: [String]?)
     }
 
     var action: Action? {
-        if let executable { return .launchProcess(executablePath: executable) }
+        if let executable { return .launchProcess(executablePath: executable, arguments: arguments) }
         if let text       { return .sendText(text, autoSend: shouldAutoSend) }
         return nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case label, text, executable, tooltip, autoSend, icon, iconPosition
+        case label, text, executable, arguments, tooltip, autoSend, icon, iconPosition
     }
 
     init(label: String, text: String?, executable: String? = nil,
+         arguments: [String]? = nil,
          tooltip: String? = nil, autoSend: Bool? = nil,
          icon: String? = nil, iconPosition: IconPosition? = nil) {
         self.label = label
         self.text = text
         self.executable = executable
+        self.arguments = arguments
         self.tooltip = tooltip
         self.autoSend = autoSend
         self.icon = icon
@@ -55,6 +58,7 @@ struct CommandItem: Codable, Identifiable {
         self.label = try container.decode(String.self, forKey: .label)
         self.text = try container.decodeIfPresent(String.self, forKey: .text)
         self.executable = try container.decodeIfPresent(String.self, forKey: .executable)
+        self.arguments = try container.decodeIfPresent([String].self, forKey: .arguments)
         self.tooltip = try container.decodeIfPresent(String.self, forKey: .tooltip)
         self.autoSend = try container.decodeIfPresent(Bool.self, forKey: .autoSend)
         self.icon = try container.decodeIfPresent(String.self, forKey: .icon)
@@ -81,6 +85,14 @@ struct CommandItem: Codable, Identifiable {
             throw DecodingError.dataCorruptedError(
                 forKey: .executable, in: container,
                 debugDescription: "Item '\(label)' executable '\(exec)' must be an absolute path (start with '/')."
+            )
+        }
+
+        // Validation: arguments only makes sense with executable.
+        if arguments != nil, executable == nil {
+            throw DecodingError.dataCorruptedError(
+                forKey: .arguments, in: container,
+                debugDescription: "Item '\(label)' has 'arguments' but no 'executable'; arguments only apply to executable items."
             )
         }
     }
@@ -229,9 +241,11 @@ final class CommandStore: ObservableObject {
         //
         // Quick schema:
         //   sections[]: { name, layout?: "flow"|"list"|"tiles", items[] }
-        //   items[]:    { label, text? | executable?, tooltip?, autoSend?, icon?, iconPosition? }
+        //   items[]:    { label, text? | executable?, arguments?, tooltip?, autoSend?, icon?, iconPosition? }
         //
-        // - Use exactly one of `text` (sent to terminal) or `executable` (absolute path, spawned with project path).
+        // - Use exactly one of `text` (sent to terminal) or `executable` (absolute path, spawned).
+        // - `arguments`: optional argv for `executable`. Use `{{path}}` as a placeholder for the
+        //   active project path. When omitted, argv defaults to `[<project_path>]`.
         // - `icon`: SF Symbol name (e.g. "hammer.fill") or "data:image/svg+xml;base64,...".
         // - `iconPosition`: tiles → top|bottom|left|right (default top); flow/list → left|right (default left).
         // - Saves reload automatically. A validation error empties the palette until fixed.
@@ -264,13 +278,20 @@ final class CommandStore: ObservableObject {
                 ]
             },
             {
-                // App launchers — clicked tile runs `<executable> <project_path>`.
+                // App launchers — clicked tile spawns `executable`.
+                // By default argv is `[<project_path>]`. Use `arguments` with the
+                // `{{path}}` placeholder for apps that need flag-style invocation.
                 // Edit these paths to match your installations, then uncomment.
                 "name": "Apps",
                 "layout": "tiles",
                 "items": [
                     // { "label": "VSCode", "executable": "/usr/local/bin/code" },
-                    // { "label": "Tower",  "executable": "/Applications/Tower.app/Contents/MacOS/Tower" }
+                    // { "label": "Tower",  "executable": "/Applications/Tower.app/Contents/MacOS/Tower" },
+                    // {
+                    //     "label": "Ghostty",
+                    //     "executable": "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+                    //     "arguments": ["--working-directory={{path}}"]
+                    // }
                 ]
             }
         ]

@@ -44,28 +44,50 @@ A config has one or more **sections**, displayed top-to-bottom in the sidebar. E
 
 ## Item properties
 
-| Field          | Type   | Required    | Default          | Description                                                                  |
-| -------------- | ------ | ----------- | ---------------- | ---------------------------------------------------------------------------- |
-| `label`        | string | yes         | —                | Button text shown in the palette                                             |
-| `text`         | string | conditional | —                | Text sent to the active terminal when clicked                                |
-| `executable`   | string | conditional | —                | Absolute path to a binary; spawns `<executable> <project_path>`              |
-| `tooltip`      | string | no          | —                | Hover tooltip                                                                |
-| `autoSend`     | bool   | no          | `false`          | Press Enter after sending text. Only meaningful for `text` items.            |
-| `icon`         | string | no          | —                | SF Symbol name **or** base64 SVG data URI. See [Icons](#icons).              |
-| `iconPosition` | string | no          | layout-dependent | `top` \| `bottom` \| `left` \| `right`. See [Icon position](#icon-position). |
+| Field          | Type     | Required    | Default          | Description                                                                                                                       |
+| -------------- | -------- | ----------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `label`        | string   | yes         | —                | Button text shown in the palette                                                                                                  |
+| `text`         | string   | conditional | —                | Text sent to the active terminal when clicked                                                                                     |
+| `executable`   | string   | conditional | —                | Absolute path to a binary. Default argv is `[<project_path>]`; override with `arguments`.                                         |
+| `arguments`    | string[] | no          | —                | Argv for `executable`. `{{path}}` is replaced with the active project path. See [Arguments](#arguments-and-the-path-placeholder). |
+| `tooltip`      | string   | no          | —                | Hover tooltip                                                                                                                     |
+| `autoSend`     | bool     | no          | `false`          | Press Enter after sending text. Only meaningful for `text` items.                                                                 |
+| `icon`         | string   | no          | —                | SF Symbol name **or** base64 SVG data URI. See [Icons](#icons).                                                                   |
+| `iconPosition` | string   | no          | layout-dependent | `top` \| `bottom` \| `left` \| `right`. See [Icon position](#icon-position).                                                      |
 
 ### `text` vs `executable` — mutually exclusive
 
 Each item must have **exactly one** of `text` or `executable`:
 
-| Field        | Behavior on click                                                            |
-| ------------ | ---------------------------------------------------------------------------- |
-| `text`       | Pastes the text into the active terminal. Presses Enter if `autoSend: true`. |
-| `executable` | Spawns `<executable> <project_path>` as a new process.                       |
+| Field        | Behavior on click                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------- |
+| `text`       | Pastes the text into the active terminal. Presses Enter if `autoSend: true`.                                    |
+| `executable` | Spawns the binary as a new process. Argv defaults to `[<project_path>]`; override with `arguments` (see below). |
 
 An item with both fields, or with neither, fails to load — and the entire config file errors out, leaving the palette empty.
 
 `executable` paths must be **absolute** (start with `/`). Relative paths are rejected.
+
+### Arguments and the `{{path}}` placeholder
+
+For executables that need flag-style invocation (e.g. apps that take a `--working-directory=` argument rather than a positional path), use the `arguments` array. Each element is passed as a separate argv entry, and the literal token `{{path}}` is replaced with the absolute project path before the process spawns.
+
+```jsonc
+{
+  "label": "Ghostty",
+  "executable": "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+  "arguments": ["--working-directory={{path}}"],
+}
+```
+
+Behavior rules:
+
+- `arguments` **omitted** → argv is `[<project_path>]` (legacy default — existing entries keep working).
+- `arguments` **present** → argv is exactly the supplied array, with `{{path}}` substituted in each element. Nothing is appended automatically.
+- `arguments: []` is valid and means "launch with no arguments at all."
+- `{{path}}` may appear anywhere in an argv element, including embedded in flag values (`--foo={{path}}/bar`). All occurrences are replaced.
+- The process working directory is **always** set to the project path, regardless of `arguments`.
+- `arguments` only applies to `executable` items. Pairing it with `text`, or using it on an item that has no `executable`, is a validation error.
 
 ---
 
@@ -202,6 +224,12 @@ The clamping is intentional — chip and list layouts have their own visual rhyt
           "icon": "arrow.triangle.branch",
           "iconPosition": "left",
         },
+        {
+          "label": "Ghostty",
+          "executable": "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+          "arguments": ["--working-directory={{path}}"],
+          "icon": "terminal",
+        },
       ],
     },
   ],
@@ -223,6 +251,7 @@ The clamping is intentional — chip and list layouts have their own visual rhyt
 | Item has both `text` and `executable`    | Use exactly one                                                                   |
 | Item has neither `text` nor `executable` | Use exactly one                                                                   |
 | `executable` doesn't start with `/`      | Provide an absolute path                                                          |
+| `arguments` set without `executable`     | `arguments` only applies to executable items                                      |
 | Malformed JSONC                          | The parser allows comments but no trailing commas; check for missing/extra braces |
 
 For deeper diagnostics, open Console.app and filter on the subsystem `com.flydev.ghostcode`.

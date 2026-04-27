@@ -45,8 +45,9 @@ final class CommandActionTests: XCTestCase {
             tooltip: nil,
             autoSend: nil
         )
-        if case .launchProcess(let path) = item.action {
+        if case .launchProcess(let path, let arguments) = item.action {
             XCTAssertEqual(path, "/usr/local/bin/code")
+            XCTAssertNil(arguments, "arguments should be nil when not specified")
         } else {
             XCTFail("Expected .launchProcess action, got \(String(describing: item.action))")
         }
@@ -62,10 +63,27 @@ final class CommandActionTests: XCTestCase {
             tooltip: nil,
             autoSend: nil
         )
-        if case .launchProcess(let path) = item.action {
+        if case .launchProcess(let path, _) = item.action {
             XCTAssertEqual(path, "/bin/echo")
         } else {
             XCTFail("Expected executable to win over text")
+        }
+    }
+
+    func testActionForwardsArgumentsWhenSet() {
+        let item = CommandItem(
+            label: "Ghostty",
+            text: nil,
+            executable: "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+            arguments: ["--working-directory={{path}}"],
+            tooltip: nil,
+            autoSend: nil
+        )
+        if case .launchProcess(let path, let arguments) = item.action {
+            XCTAssertEqual(path, "/Applications/Ghostty.app/Contents/MacOS/ghostty")
+            XCTAssertEqual(arguments, ["--working-directory={{path}}"])
+        } else {
+            XCTFail("Expected .launchProcess action, got \(String(describing: item.action))")
         }
     }
 }

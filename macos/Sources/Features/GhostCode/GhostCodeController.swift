@@ -130,11 +130,12 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                     switch action {
                     case .sendText(let text, let sendEnter):
                         self.sendTextToActiveTerminal(text, sendEnter: sendEnter)
-                    case .launchProcess(let executablePath):
+                    case .launchProcess(let executablePath, let arguments):
                         guard let projectPath = self.activeProjectPath else { return }
                         ExecutableLauncher.launch(
                             executablePath: executablePath,
-                            projectPath: projectPath
+                            projectPath: projectPath,
+                            arguments: arguments
                         ) { [weak self] path, reason in
                             self?.presentLaunchFailure(executablePath: path, reason: reason)
                         }

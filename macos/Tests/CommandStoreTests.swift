@@ -165,6 +165,83 @@ final class CommandStoreTests: XCTestCase {
                       "Should fail to load when executable is not an absolute path")
     }
 
+    // MARK: - Arguments field
+
+    func testItemDecodesArgumentsFieldWhenPresent() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Apps",
+              "layout": "tiles",
+              "items": [
+                {
+                  "label": "Ghostty",
+                  "executable": "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+                  "arguments": ["--working-directory={{path}}"]
+                }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertEqual(store.sections[0].items[0].arguments,
+                       ["--working-directory={{path}}"])
+    }
+
+    func testItemArgumentsIsNilWhenAbsent() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Apps",
+              "items": [
+                { "label": "VSCode", "executable": "/usr/local/bin/code" }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertNil(store.sections[0].items[0].arguments)
+    }
+
+    func testItemArgumentsCanBeEmptyArray() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Apps",
+              "items": [
+                { "label": "Bare", "executable": "/usr/bin/true", "arguments": [] }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertEqual(store.sections[0].items[0].arguments, [])
+    }
+
+    func testArgumentsWithoutExecutableFailsDecode() throws {
+        let json = """
+        {
+          "sections": [
+            {
+              "name": "Bad",
+              "items": [
+                { "label": "Orphan", "text": "hi", "arguments": ["--x"] }
+              ]
+            }
+          ]
+        }
+        """
+        let store = try makeStore(with: json)
+        XCTAssertTrue(store.sections.isEmpty,
+                      "Should fail to load when arguments is set without executable")
+    }
+
     // MARK: - Icon field
 
     func testItemDecodesIconFieldWhenPresent() throws {
