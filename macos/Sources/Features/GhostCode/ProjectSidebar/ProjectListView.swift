@@ -317,6 +317,11 @@ struct ProjectListView: View {
         if panel.runModal() == .OK, let url = panel.url {
             store.addProject(path: url.path)
             store.refreshGitStatus(for: url.path)
+            // Newly added projects start as .inactive; reset the filter so the
+            // user immediately sees the project they just chose.
+            if filter != .all {
+                filter = .all
+            }
         }
     }
 
