@@ -35,16 +35,27 @@ final class ProjectStore: ObservableObject {
         saveToDisk()
     }
 
+    /// Update a project's attention indicator. Runtime-only — does not save to disk.
+    func setAttention(_ path: String, hasAttention: Bool) {
+        guard let index = projects.firstIndex(where: { $0.path == path }) else { return }
+        guard projects[index].hasAttention != hasAttention else { return }
+        projects[index].hasAttention = hasAttention
+    }
+
     func replaceProjects(_ newProjects: [Project]) {
-        // Preserve binary and customName from existing projects
+        // Preserve binary, customName, and hasAttention from existing projects
         var binaryMap: [String: SupportedBinary] = [:]
         var nameMap: [String: String] = [:]
+        var attentionMap: [String: Bool] = [:]
         for project in projects {
             if let binary = project.binary {
                 binaryMap[project.path] = binary
             }
             if let custom = project.customName {
                 nameMap[project.path] = custom
+            }
+            if project.hasAttention {
+                attentionMap[project.path] = true
             }
         }
 
@@ -58,6 +69,7 @@ final class ProjectStore: ObservableObject {
                 binary: binary
             )
             rebuilt.gitStatus = project.gitStatus
+            rebuilt.hasAttention = attentionMap[project.path] ?? false
             return rebuilt
         }
         saveToDisk()
