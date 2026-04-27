@@ -23,6 +23,8 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     let projectStore = ProjectStore()
     let commandStore = CommandStore()
     let commandPaletteState = CommandPaletteState()
+    let attentionTracker = ProjectAttentionTracker()
+    private var attentionBridgeCancellable: AnyCancellable?
 
     // The project path whose terminals are currently displayed in the center pane
     private var activeProjectPath: String?
@@ -84,6 +86,19 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                            name: .ghosttyMoveTab, object: nil)
         center.addObserver(self, selector: #selector(onGhosttyCloseTab(_:)),
                            name: .ghosttyCloseTab, object: nil)
+
+        // Bridge tracker emissions into the project store.
+        attentionBridgeCancellable = attentionTracker.$attentionProjects
+            .receive(on: DispatchQueue.main)
+            .scan(Set<String>()) { [weak self] previous, current in
+                guard let self else { return current }
+                let changed = previous.symmetricDifference(current)
+                for path in changed {
+                    self.projectStore.setAttention(path, hasAttention: current.contains(path))
+                }
+                return current
+            }
+            .sink { _ in }
     }
 
     @available(*, unavailable)
@@ -432,6 +447,19 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         tabGroup.addTab(tab)
         projectTabs[project.path] = tabGroup
 
+        let trackedTabs = tabGroup.$tabs
+            .map { items in
+                items.map { item in
+                    TrackedTab(
+                        id: item.id,
+                        kind: item.kind,
+                        bellPublisher: item.controller.$bell.eraseToAnyPublisher()
+                    )
+                }
+            }
+            .eraseToAnyPublisher()
+        attentionTracker.startTracking(projectPath: project.path, trackedTabs: trackedTabs)
+
         projectStore.setActive(project.path, active: true)
         showProjectTerminals(for: project)
         observeTabExit(tab, projectPath: project.path)
@@ -442,6 +470,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
         activeProjectPath = project.path
         projectStore.setVisible(project.path)
+        attentionTracker.clearAttention(projectPath: project.path)
         updateRightSidebarLock()
 
         // Build the new container before removing the old one to avoid a
@@ -696,6 +725,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     }
 
     private func cleanupTabGroup(for projectPath: String) {
+        attentionTracker.stopTracking(projectPath: projectPath)
         if let tabGroup = projectTabs[projectPath] {
             for tab in tabGroup.tabs {
                 exitCancellables.removeValue(forKey: tab.id)
