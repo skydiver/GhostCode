@@ -216,7 +216,7 @@ struct ProjectListView: View {
 
     @ViewBuilder
     private var normalModeList: some View {
-        ForEach(store.projects) { project in
+        ForEach(visibleProjects) { project in
             ProjectRow(
                 project: project,
                 isSelected: store.selectedPath == project.path,
