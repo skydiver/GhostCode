@@ -400,6 +400,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                 showProjectLanding(for: project)
                 return
             }
+            attentionTracker.clearAttention(projectPath: project.path)
             showProjectTerminals(for: project)
             return
         }
@@ -470,7 +471,6 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
         activeProjectPath = project.path
         projectStore.setVisible(project.path)
-        attentionTracker.clearAttention(projectPath: project.path)
         updateRightSidebarLock()
 
         // Build the new container before removing the old one to avoid a
