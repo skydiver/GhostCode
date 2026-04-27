@@ -389,7 +389,7 @@ struct ProjectRow: View {
             } else {
                 stateIndicator
                     .frame(width: 8, height: 8)
-                    .animation(.easeInOut(duration: 0.7), value: pulseClock.phase)
+                    .animation(.easeInOut(duration: 0.7), value: pulseOpacity)
             }
 
             VStack(alignment: .leading, spacing: 3) {
