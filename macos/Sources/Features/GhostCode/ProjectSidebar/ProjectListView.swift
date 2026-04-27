@@ -3,6 +3,7 @@ import SwiftUI
 /// The left sidebar view showing the project list.
 struct ProjectListView: View {
     @ObservedObject var store: ProjectStore
+    @StateObject private var pulseClock = PulseClock()
     let onSelectProject: (Project) -> Void
 
     @State private var gitRefreshTimer = Timer.publish(
@@ -155,6 +156,7 @@ struct ProjectListView: View {
                 .fill(Color(nsColor: .separatorColor))
                 .frame(width: 1)
         }
+        .environmentObject(pulseClock)
         .onReceive(gitRefreshTimer) { _ in
             store.refreshAllGitStatus()
         }
@@ -369,6 +371,9 @@ struct ProjectRow: View {
     let isSelected: Bool
     var editing: Bool = false
 
+    @EnvironmentObject private var pulseClock: PulseClock
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var renameText: Binding<String>? = nil
     var renameFocus: FocusState<Bool>.Binding? = nil
     var onRenameCommit: () -> Void = {}
@@ -384,6 +389,7 @@ struct ProjectRow: View {
             } else {
                 stateIndicator
                     .frame(width: 8, height: 8)
+                    .animation(.easeInOut(duration: 0.7), value: pulseClock.phase)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -441,19 +447,44 @@ struct ProjectRow: View {
                     .frame(width: 3)
             }
         }
+        .accessibilityLabel(accessibilityLabel)
     }
 
     @ViewBuilder
     private var stateIndicator: some View {
-        switch project.state {
-        case .activeVisible:
-            Circle().fill(.green)
-        case .activeBackground:
-            Circle()
-                .stroke(.green, lineWidth: 1.5)
-        case .inactive:
-            Circle().fill(Color.secondary.opacity(0.5))
+        ZStack {
+            // Reduce-motion fallback: static outer ring when attention is set.
+            if project.hasAttention && reduceMotion {
+                Circle()
+                    .stroke(Color.green, lineWidth: 2)
+                    .frame(width: 14, height: 14)
+            }
+
+            switch project.state {
+            case .activeVisible:
+                Circle()
+                    .fill(.green)
+                    .opacity(pulseOpacity)
+            case .activeBackground:
+                Circle()
+                    .stroke(.green, lineWidth: 1.5)
+                    .opacity(pulseOpacity)
+            case .inactive:
+                Circle().fill(Color.secondary.opacity(0.5))
+            }
         }
+    }
+
+    private var pulseOpacity: Double {
+        guard project.hasAttention, !reduceMotion else { return 1.0 }
+        return pulseClock.phase ? 1.0 : 0.35
+    }
+
+    private var accessibilityLabel: String {
+        if project.hasAttention {
+            return "\(project.name), waiting for input"
+        }
+        return project.name
     }
 
     private func statusColor(_ git: Project.GitStatus) -> Color {
