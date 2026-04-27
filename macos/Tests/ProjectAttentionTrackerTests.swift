@@ -9,25 +9,17 @@ final class ProjectAttentionTrackerTests: XCTestCase {
     func test_setBell_AI_true_addsProjectAndTab() {
         let tracker = ProjectAttentionTracker()
         let id = UUID()
-        tracker.setBell(projectPath: "/p/A", tabId: id, isAI: true, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: id, hasBell: true)
 
         XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
         XCTAssertEqual(tracker.attentionTabs, [id])
     }
 
-    func test_setBell_shellTab_isIgnored() {
-        let tracker = ProjectAttentionTracker()
-        tracker.setBell(projectPath: "/p/A", tabId: UUID(), isAI: false, hasBell: true)
-
-        XCTAssertTrue(tracker.attentionProjects.isEmpty)
-        XCTAssertTrue(tracker.attentionTabs.isEmpty)
-    }
-
     func test_setBell_falseAfterTrue_removesTab_andClearsProjectIfEmpty() {
         let tracker = ProjectAttentionTracker()
         let id = UUID()
-        tracker.setBell(projectPath: "/p/A", tabId: id, isAI: true, hasBell: true)
-        tracker.setBell(projectPath: "/p/A", tabId: id, isAI: true, hasBell: false)
+        tracker.setBell(projectPath: "/p/A", tabId: id, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: id, hasBell: false)
 
         XCTAssertTrue(tracker.attentionProjects.isEmpty)
         XCTAssertTrue(tracker.attentionTabs.isEmpty)
@@ -36,13 +28,13 @@ final class ProjectAttentionTrackerTests: XCTestCase {
     func test_twoAITabs_inSameProject_clearingOneKeepsProject() {
         let tracker = ProjectAttentionTracker()
         let id1 = UUID(), id2 = UUID()
-        tracker.setBell(projectPath: "/p/A", tabId: id1, isAI: true, hasBell: true)
-        tracker.setBell(projectPath: "/p/A", tabId: id2, isAI: true, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: id1, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: id2, hasBell: true)
 
         XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
         XCTAssertEqual(tracker.attentionTabs, [id1, id2])
 
-        tracker.setBell(projectPath: "/p/A", tabId: id1, isAI: true, hasBell: false)
+        tracker.setBell(projectPath: "/p/A", tabId: id1, hasBell: false)
 
         XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
         XCTAssertEqual(tracker.attentionTabs, [id2])
@@ -53,8 +45,8 @@ final class ProjectAttentionTrackerTests: XCTestCase {
     func test_clearAttention_removesProjectAndItsTabs_butLeavesOtherProjects() {
         let tracker = ProjectAttentionTracker()
         let aTab = UUID(), bTab = UUID()
-        tracker.setBell(projectPath: "/p/A", tabId: aTab, isAI: true, hasBell: true)
-        tracker.setBell(projectPath: "/p/B", tabId: bTab, isAI: true, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: aTab, hasBell: true)
+        tracker.setBell(projectPath: "/p/B", tabId: bTab, hasBell: true)
 
         tracker.clearAttention(projectPath: "/p/A")
 
@@ -74,8 +66,8 @@ final class ProjectAttentionTrackerTests: XCTestCase {
     func test_reconcileTabs_prunesStaleUUIDs_andClearsProjectIfEmpty() {
         let tracker = ProjectAttentionTracker()
         let live = UUID(), stale = UUID()
-        tracker.setBell(projectPath: "/p/A", tabId: live, isAI: true, hasBell: true)
-        tracker.setBell(projectPath: "/p/A", tabId: stale, isAI: true, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: live, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: stale, hasBell: true)
 
         tracker.reconcileTabs(projectPath: "/p/A", liveTabIds: [live])
         XCTAssertEqual(tracker.attentionTabs, [live])
@@ -91,10 +83,126 @@ final class ProjectAttentionTrackerTests: XCTestCase {
     func test_stopTracking_clearsState() {
         let tracker = ProjectAttentionTracker()
         let id = UUID()
-        tracker.setBell(projectPath: "/p/A", tabId: id, isAI: true, hasBell: true)
+        tracker.setBell(projectPath: "/p/A", tabId: id, hasBell: true)
         tracker.stopTracking(projectPath: "/p/A")
 
         XCTAssertTrue(tracker.attentionProjects.isEmpty)
         XCTAssertTrue(tracker.attentionTabs.isEmpty)
+    }
+
+    // MARK: - Wiring layer
+
+    func test_wiring_aiBellTrue_propagatesToAttentionSets() {
+        let tracker = ProjectAttentionTracker()
+        let bell = CurrentValueSubject<Bool, Never>(false)
+        let id = UUID()
+        let tabs = CurrentValueSubject<[TrackedTab], Never>([
+            TrackedTab(id: id, kind: .ai, bellPublisher: bell.eraseToAnyPublisher())
+        ])
+        tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
+
+        bell.send(true)
+        let exp = expectation(description: "main loop dispatch")
+        DispatchQueue.main.async { exp.fulfill() }
+        wait(for: [exp], timeout: 0.5)
+
+        XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
+        XCTAssertEqual(tracker.attentionTabs, [id])
+    }
+
+    func test_wiring_shellTab_isIgnored() {
+        let tracker = ProjectAttentionTracker()
+        let bell = CurrentValueSubject<Bool, Never>(false)
+        let id = UUID()
+        let tabs = CurrentValueSubject<[TrackedTab], Never>([
+            TrackedTab(id: id, kind: .shell, bellPublisher: bell.eraseToAnyPublisher())
+        ])
+        tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
+
+        bell.send(true)
+        let exp = expectation(description: "main loop")
+        DispatchQueue.main.async { exp.fulfill() }
+        wait(for: [exp], timeout: 0.5)
+
+        XCTAssertTrue(tracker.attentionProjects.isEmpty)
+        XCTAssertTrue(tracker.attentionTabs.isEmpty)
+    }
+
+    func test_wiring_tabRemoved_purgesUUID() {
+        let tracker = ProjectAttentionTracker()
+        let bell1 = CurrentValueSubject<Bool, Never>(false)
+        let bell2 = CurrentValueSubject<Bool, Never>(false)
+        let id1 = UUID(), id2 = UUID()
+        let tabs = CurrentValueSubject<[TrackedTab], Never>([
+            TrackedTab(id: id1, kind: .ai, bellPublisher: bell1.eraseToAnyPublisher()),
+            TrackedTab(id: id2, kind: .ai, bellPublisher: bell2.eraseToAnyPublisher()),
+        ])
+        tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
+
+        bell1.send(true); bell2.send(true)
+        let exp1 = expectation(description: "loop1")
+        DispatchQueue.main.async { exp1.fulfill() }
+        wait(for: [exp1], timeout: 0.5)
+        XCTAssertEqual(tracker.attentionTabs.count, 2)
+
+        // Drop tab 1 from the snapshot — reconcileTabs must purge id1.
+        tabs.send([
+            TrackedTab(id: id2, kind: .ai, bellPublisher: bell2.eraseToAnyPublisher()),
+        ])
+        let exp2 = expectation(description: "loop2")
+        DispatchQueue.main.async { exp2.fulfill() }
+        wait(for: [exp2], timeout: 0.5)
+
+        XCTAssertEqual(tracker.attentionTabs, [id2])
+        XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
+    }
+
+    func test_wiring_startTracking_isIdempotent() {
+        let tracker = ProjectAttentionTracker()
+        let bell = CurrentValueSubject<Bool, Never>(false)
+        let id = UUID()
+        let tabs = CurrentValueSubject<[TrackedTab], Never>([
+            TrackedTab(id: id, kind: .ai, bellPublisher: bell.eraseToAnyPublisher())
+        ])
+        tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
+
+        // Second call must be a no-op — passing a different (empty) publisher
+        // should not replace the live subscription.
+        let other = CurrentValueSubject<[TrackedTab], Never>([])
+        tracker.startTracking(projectPath: "/p/A", trackedTabs: other.eraseToAnyPublisher())
+
+        bell.send(true)
+        let exp = expectation(description: "loop")
+        DispatchQueue.main.async { exp.fulfill() }
+        wait(for: [exp], timeout: 0.5)
+
+        XCTAssertEqual(tracker.attentionTabs, [id], "second startTracking must be a no-op")
+    }
+
+    func test_wiring_stopTracking_clearsBothBags() {
+        let tracker = ProjectAttentionTracker()
+        let bell = CurrentValueSubject<Bool, Never>(false)
+        let id = UUID()
+        let tabs = CurrentValueSubject<[TrackedTab], Never>([
+            TrackedTab(id: id, kind: .ai, bellPublisher: bell.eraseToAnyPublisher())
+        ])
+        tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
+
+        bell.send(true)
+        let exp1 = expectation(description: "loop1")
+        DispatchQueue.main.async { exp1.fulfill() }
+        wait(for: [exp1], timeout: 0.5)
+        XCTAssertEqual(tracker.attentionTabs, [id])
+
+        tracker.stopTracking(projectPath: "/p/A")
+        XCTAssertTrue(tracker.attentionTabs.isEmpty)
+        XCTAssertTrue(tracker.attentionProjects.isEmpty)
+
+        // After stopTracking, further bell sends must be ignored.
+        bell.send(false); bell.send(true)
+        let exp2 = expectation(description: "loop2")
+        DispatchQueue.main.async { exp2.fulfill() }
+        wait(for: [exp2], timeout: 0.5)
+        XCTAssertTrue(tracker.attentionTabs.isEmpty, "subscriptions must be torn down")
     }
 }

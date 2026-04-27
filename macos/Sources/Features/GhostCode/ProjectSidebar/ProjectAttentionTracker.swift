@@ -6,7 +6,7 @@ import Combine
 /// Two layers:
 ///   - Core state machine (`setBell`, `clearAttention`, `stopTracking`, `reconcileTabs`)
 ///     — pure, synchronous, fully unit-testable.
-///   - Combine wiring (added in a later task) — translates per-tab bell publishers
+///   - Combine wiring (`startTracking`) — translates per-tab bell publishers
 ///     into core API calls.
 ///
 /// All mutations happen on the main run loop; the wiring layer pipes events
@@ -23,14 +23,18 @@ final class ProjectAttentionTracker: ObservableObject {
 
     private var tabsByProject: [String: Set<UUID>] = [:]
 
-    /// Wiring-layer storage. Populated by a later task.
-    var cancellablesByProject: [String: Set<AnyCancellable>] = [:]
+    /// Upstream `trackedTabs` subscriptions, keyed by project path.
+    /// Set once in `startTracking` and never replaced until `stopTracking`.
+    private var cancellablesByProject: [String: Set<AnyCancellable>] = [:]
+
+    /// Per-tab bell subscriptions, replaced wholesale on every snapshot update.
+    private var perTabCancellablesByProject: [String: Set<AnyCancellable>] = [:]
 
     // MARK: - Core API
 
-    /// Record bell state for a single tab. Non-AI tabs are ignored.
-    func setBell(projectPath: String, tabId: UUID, isAI: Bool, hasBell: Bool) {
-        guard isAI else { return }
+    /// Record bell state for a single tab.
+    /// The wiring layer only calls this for AI tabs (kind-filtered at subscription time).
+    func setBell(projectPath: String, tabId: UUID, hasBell: Bool) {
         if hasBell {
             attentionTabs.insert(tabId)
             tabsByProject[projectPath, default: []].insert(tabId)
@@ -71,9 +75,69 @@ final class ProjectAttentionTracker: ObservableObject {
         }
     }
 
-    /// Stop tracking a project. Drops Combine subscriptions and clears state.
+    /// Stop tracking a project. Drops all Combine subscriptions and clears state.
     func stopTracking(projectPath: String) {
         clearAttention(projectPath: projectPath)
         cancellablesByProject.removeValue(forKey: projectPath)
+        perTabCancellablesByProject.removeValue(forKey: projectPath)
+    }
+}
+
+// MARK: - Wiring layer
+
+/// A tab as the tracker sees it. Decouples the wiring layer from `TabItem`
+/// so tests can construct one directly without a real `TerminalController`.
+struct TrackedTab {
+    let id: UUID
+    let kind: TabKind
+    let bellPublisher: AnyPublisher<Bool, Never>
+}
+
+extension ProjectAttentionTracker {
+
+    /// Begin tracking a project. Idempotent — calling twice with the same
+    /// path is a no-op. Subscribes to the upstream `TrackedTab` stream and,
+    /// for each AI tab in the latest snapshot, to that tab's bell publisher.
+    /// On every snapshot change, stale UUIDs are reconciled and per-tab
+    /// subscriptions are rebuilt.
+    func startTracking(
+        projectPath: String,
+        trackedTabs: AnyPublisher<[TrackedTab], Never>
+    ) {
+        guard cancellablesByProject[projectPath] == nil else { return }
+
+        var bag: Set<AnyCancellable> = []
+
+        trackedTabs
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] tabs in
+                self?.rebuildSubscriptions(projectPath: projectPath, tabs: tabs)
+            }
+            .store(in: &bag)
+
+        cancellablesByProject[projectPath] = bag
+    }
+
+    private func rebuildSubscriptions(projectPath: String, tabs: [TrackedTab]) {
+        let liveIds = Set(tabs.map(\.id))
+        reconcileTabs(projectPath: projectPath, liveTabIds: liveIds)
+
+        var bag: Set<AnyCancellable> = []
+
+        for tab in tabs where tab.kind == .ai {
+            let id = tab.id
+            tab.bellPublisher
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] hasBell in
+                    self?.setBell(projectPath: projectPath, tabId: id, hasBell: hasBell)
+                }
+                .store(in: &bag)
+        }
+
+        // Replace the per-tab bag wholesale — previous set is released,
+        // dropping all stale per-tab subscriptions automatically.
+        // The upstream trackedTabs sink in cancellablesByProject is untouched.
+        perTabCancellablesByProject[projectPath] = bag
     }
 }
