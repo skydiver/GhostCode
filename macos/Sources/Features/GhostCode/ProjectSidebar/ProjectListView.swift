@@ -93,7 +93,7 @@ struct ProjectListView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             } else {
-                HStack {
+                HStack(spacing: 8) {
                     Button(action: addProject) {
                         HStack(spacing: 8) {
                             Image(systemName: "plus")
@@ -105,6 +105,25 @@ struct ProjectListView: View {
                     .buttonStyle(.plain)
 
                     Spacer()
+
+                    Button(action: cycleFilter) {
+                        Image(systemName: filter == .active
+                            ? "line.3.horizontal.decrease.circle.fill"
+                            : "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 12))
+                            .foregroundStyle(filter == .active ? .green : .secondary)
+                            .frame(width: 24, height: 24)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.projects.isEmpty)
+                    .help(filter == .active
+                        ? "Showing active projects only — click to show all"
+                        : "Show all projects — click to show only active")
+                    .accessibilityLabel(filter == .active
+                        ? "Showing active projects only"
+                        : "Showing all projects")
 
                     Button(action: enterEditMode) {
                         Image(systemName: "pencil")
@@ -259,6 +278,10 @@ struct ProjectListView: View {
     private func cancelRename() {
         renamingPath = nil
         renameBuffer = ""
+    }
+
+    private func cycleFilter() {
+        filter = filter.next
     }
 
     private func enterEditMode() {
