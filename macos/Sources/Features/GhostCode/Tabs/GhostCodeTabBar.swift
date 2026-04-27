@@ -181,6 +181,7 @@ private struct TabBarItem: View {
                     .frame(width: 7, height: 7)
                     .opacity(dotOpacity)
             }
+            .frame(width: 7, height: 7)
             .animation(.easeInOut(duration: 0.7), value: dotOpacity)
 
             Text(titleProvider.displayTitle)
