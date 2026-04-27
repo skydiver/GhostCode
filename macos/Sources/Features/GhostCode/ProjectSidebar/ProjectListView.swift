@@ -34,7 +34,7 @@ struct ProjectListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Projects")
+            Text(filter == .active ? "Projects · Active" : "Projects")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
