@@ -9,6 +9,9 @@ struct Project: Identifiable, Equatable {
     var state: State
     var gitStatus: GitStatus?
     var binary: SupportedBinary?
+    /// Runtime-only: true when at least one AI tab in this project has rung
+    /// the bell since the user last activated the project. NOT persisted.
+    var hasAttention: Bool = false
 
     enum State: Equatable {
         case inactive
