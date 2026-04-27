@@ -119,6 +119,12 @@ extension ProjectAttentionTracker {
     }
 
     private func rebuildSubscriptions(projectPath: String, tabs: [TrackedTab]) {
+        // Short-circuit if stopTracking ran between the upstream emission
+        // crossing .receive(on: .main) and this closure being dequeued.
+        // Without this guard, the rebuilt per-tab bag would be assigned to
+        // a key the caller believes is no longer tracked.
+        guard cancellablesByProject[projectPath] != nil else { return }
+
         let liveIds = Set(tabs.map(\.id))
         reconcileTabs(projectPath: projectPath, liveTabIds: liveIds)
 
