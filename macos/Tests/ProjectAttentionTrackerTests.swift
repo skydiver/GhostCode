@@ -4,6 +4,21 @@ import Combine
 
 final class ProjectAttentionTrackerTests: XCTestCase {
 
+    /// Drains the main queue through two async hops. The wiring layer has two
+    /// `.receive(on: DispatchQueue.main)` boundaries (upstream snapshot sink +
+    /// per-tab bell sink), so a single-hop sentinel can fulfill before the
+    /// second hop's work runs. Double-hopping ensures all triggered work is
+    /// drained before assertions fire.
+    private func drainMain() {
+        let exp = expectation(description: "drain main")
+        DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 0.5)
+    }
+
     // MARK: - setBell core API
 
     func test_setBell_AI_true_addsProjectAndTab() {
@@ -102,9 +117,7 @@ final class ProjectAttentionTrackerTests: XCTestCase {
         tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
 
         bell.send(true)
-        let exp = expectation(description: "main loop dispatch")
-        DispatchQueue.main.async { exp.fulfill() }
-        wait(for: [exp], timeout: 0.5)
+        drainMain()
 
         XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
         XCTAssertEqual(tracker.attentionTabs, [id])
@@ -120,9 +133,7 @@ final class ProjectAttentionTrackerTests: XCTestCase {
         tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
 
         bell.send(true)
-        let exp = expectation(description: "main loop")
-        DispatchQueue.main.async { exp.fulfill() }
-        wait(for: [exp], timeout: 0.5)
+        drainMain()
 
         XCTAssertTrue(tracker.attentionProjects.isEmpty)
         XCTAssertTrue(tracker.attentionTabs.isEmpty)
@@ -140,18 +151,14 @@ final class ProjectAttentionTrackerTests: XCTestCase {
         tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
 
         bell1.send(true); bell2.send(true)
-        let exp1 = expectation(description: "loop1")
-        DispatchQueue.main.async { exp1.fulfill() }
-        wait(for: [exp1], timeout: 0.5)
+        drainMain()
         XCTAssertEqual(tracker.attentionTabs.count, 2)
 
         // Drop tab 1 from the snapshot — reconcileTabs must purge id1.
         tabs.send([
             TrackedTab(id: id2, kind: .ai, bellPublisher: bell2.eraseToAnyPublisher()),
         ])
-        let exp2 = expectation(description: "loop2")
-        DispatchQueue.main.async { exp2.fulfill() }
-        wait(for: [exp2], timeout: 0.5)
+        drainMain()
 
         XCTAssertEqual(tracker.attentionTabs, [id2])
         XCTAssertEqual(tracker.attentionProjects, ["/p/A"])
@@ -172,9 +179,7 @@ final class ProjectAttentionTrackerTests: XCTestCase {
         tracker.startTracking(projectPath: "/p/A", trackedTabs: other.eraseToAnyPublisher())
 
         bell.send(true)
-        let exp = expectation(description: "loop")
-        DispatchQueue.main.async { exp.fulfill() }
-        wait(for: [exp], timeout: 0.5)
+        drainMain()
 
         XCTAssertEqual(tracker.attentionTabs, [id], "second startTracking must be a no-op")
     }
@@ -189,9 +194,7 @@ final class ProjectAttentionTrackerTests: XCTestCase {
         tracker.startTracking(projectPath: "/p/A", trackedTabs: tabs.eraseToAnyPublisher())
 
         bell.send(true)
-        let exp1 = expectation(description: "loop1")
-        DispatchQueue.main.async { exp1.fulfill() }
-        wait(for: [exp1], timeout: 0.5)
+        drainMain()
         XCTAssertEqual(tracker.attentionTabs, [id])
 
         tracker.stopTracking(projectPath: "/p/A")
@@ -200,9 +203,7 @@ final class ProjectAttentionTrackerTests: XCTestCase {
 
         // After stopTracking, further bell sends must be ignored.
         bell.send(false); bell.send(true)
-        let exp2 = expectation(description: "loop2")
-        DispatchQueue.main.async { exp2.fulfill() }
-        wait(for: [exp2], timeout: 0.5)
+        drainMain()
         XCTAssertTrue(tracker.attentionTabs.isEmpty, "subscriptions must be torn down")
     }
 }
