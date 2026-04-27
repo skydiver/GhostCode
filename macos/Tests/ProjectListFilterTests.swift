@@ -32,9 +32,17 @@ final class ProjectListFilterTests: XCTestCase {
         XCTAssertTrue(ProjectListFilter.active.apply(to: projects).isEmpty)
     }
 
-    func testRawValueIsStableForAppStorage() {
+    func testNextCyclesAllToActiveAndBack() {
+        XCTAssertEqual(ProjectListFilter.all.next, .active)
+        XCTAssertEqual(ProjectListFilter.active.next, .all)
+    }
+
+    func testRawValueEncodingIsStable() {
         XCTAssertEqual(ProjectListFilter.all.rawValue, "all")
         XCTAssertEqual(ProjectListFilter.active.rawValue, "active")
+    }
+
+    func testRawValueDecodingIsStable() {
         XCTAssertEqual(ProjectListFilter(rawValue: "all"), .all)
         XCTAssertEqual(ProjectListFilter(rawValue: "active"), .active)
     }
