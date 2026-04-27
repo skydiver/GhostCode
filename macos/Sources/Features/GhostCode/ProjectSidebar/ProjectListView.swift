@@ -61,8 +61,16 @@ struct ProjectListView: View {
                 }
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
-                        normalModeList
+                    if filter == .active && visibleProjects.isEmpty && !store.projects.isEmpty {
+                        Text("No active projects")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                    } else {
+                        LazyVStack(spacing: 2) {
+                            normalModeList
+                        }
                     }
                 }
             }
