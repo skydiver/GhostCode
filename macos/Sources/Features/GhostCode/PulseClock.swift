@@ -11,12 +11,17 @@ final class PulseClock: ObservableObject {
 
     /// - Parameter interval: half-period in seconds. Default matches
     ///   the design spec (0.7s per ease-in-out leg → 1.4s full cycle).
+    ///
+    /// The timer is explicitly added to the main run loop so its lifecycle
+    /// is independent of the caller's run loop. `Timer.invalidate()` must
+    /// be called on the same run loop the timer was scheduled on; pinning
+    /// to `.main` makes that contract correct regardless of where init runs.
     init(interval: TimeInterval = 0.7) {
-        self.timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.phase.toggle()
-            }
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            self?.phase.toggle()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     deinit {
