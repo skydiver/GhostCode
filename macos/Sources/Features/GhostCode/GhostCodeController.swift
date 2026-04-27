@@ -88,17 +88,16 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                            name: .ghosttyCloseTab, object: nil)
 
         // Bridge tracker emissions into the project store.
+        // .scan carries (previous, current) so the sink only reacts to changed paths.
         attentionBridgeCancellable = attentionTracker.$attentionProjects
+            .scan((Set<String>(), Set<String>())) { acc, current in (acc.1, current) }
             .receive(on: DispatchQueue.main)
-            .scan(Set<String>()) { [weak self] previous, current in
-                guard let self else { return current }
+            .sink { [weak self] previous, current in
                 let changed = previous.symmetricDifference(current)
                 for path in changed {
-                    self.projectStore.setAttention(path, hasAttention: current.contains(path))
+                    self?.projectStore.setAttention(path, hasAttention: current.contains(path))
                 }
-                return current
             }
-            .sink { _ in }
     }
 
     @available(*, unavailable)
