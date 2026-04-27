@@ -8,17 +8,21 @@ final class PulseClockTests: XCTestCase {
         let clock = PulseClock(interval: 0.05)  // 50ms for fast test
         let initial = clock.phase
 
-        let toggled = expectation(description: "phase toggles")
+        var seen: [Bool] = []
+        let bothToggles = expectation(description: "two phase toggles")
         var cancellable: AnyCancellable?
         cancellable = clock.$phase
             .dropFirst()
             .sink { value in
-                XCTAssertEqual(value, !initial)
-                toggled.fulfill()
-                cancellable?.cancel()
+                seen.append(value)
+                if seen.count == 2 {
+                    bothToggles.fulfill()
+                    cancellable?.cancel()
+                }
             }
 
-        wait(for: [toggled], timeout: 1.0)
+        wait(for: [bothToggles], timeout: 1.0)
+        XCTAssertEqual(seen, [!initial, initial], "phase must alternate, not latch")
     }
 
     func test_clockIsStoppedOnDeinit() {
