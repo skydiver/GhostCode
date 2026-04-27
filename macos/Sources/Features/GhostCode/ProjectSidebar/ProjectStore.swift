@@ -46,7 +46,7 @@ final class ProjectStore: ObservableObject {
         // Preserve binary, customName, and hasAttention from existing projects
         var binaryMap: [String: SupportedBinary] = [:]
         var nameMap: [String: String] = [:]
-        var attentionMap: [String: Bool] = [:]
+        var attentionPaths: Set<String> = []
         for project in projects {
             if let binary = project.binary {
                 binaryMap[project.path] = binary
@@ -55,7 +55,7 @@ final class ProjectStore: ObservableObject {
                 nameMap[project.path] = custom
             }
             if project.hasAttention {
-                attentionMap[project.path] = true
+                attentionPaths.insert(project.path)
             }
         }
 
@@ -69,7 +69,7 @@ final class ProjectStore: ObservableObject {
                 binary: binary
             )
             rebuilt.gitStatus = project.gitStatus
-            rebuilt.hasAttention = attentionMap[project.path] ?? false
+            rebuilt.hasAttention = attentionPaths.contains(project.path)
             return rebuilt
         }
         saveToDisk()
