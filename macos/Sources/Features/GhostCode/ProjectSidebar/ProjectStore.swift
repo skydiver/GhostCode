@@ -12,6 +12,7 @@ private struct ProjectEntry: Codable {
 final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published private(set) var selectedPath: String?
+    @Published private(set) var lastRemovedPaths: [String] = []
 
     private let filePath: String
     private var activationHistory: [String] = []
@@ -43,6 +44,9 @@ final class ProjectStore: ObservableObject {
     }
 
     func replaceProjects(_ newProjects: [Project]) {
+        let newPaths = Set(newProjects.map(\.path))
+        let removed = projects.map(\.path).filter { !newPaths.contains($0) }
+
         // Preserve binary, customName, and hasAttention from existing projects
         var binaryMap: [String: SupportedBinary] = [:]
         var nameMap: [String: String] = [:]
@@ -73,6 +77,10 @@ final class ProjectStore: ObservableObject {
             return rebuilt
         }
         saveToDisk()
+
+        if !removed.isEmpty {
+            lastRemovedPaths = removed
+        }
     }
 
     func setActive(_ path: String, active: Bool) {
