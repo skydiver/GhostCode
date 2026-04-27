@@ -20,6 +20,18 @@ struct ProjectListView: View {
     @State private var renameBuffer: String = ""
     @FocusState private var renameFieldFocused: Bool
 
+    @AppStorage("ghostcode.projectListFilter")
+    private var filterRawValue: String = ProjectListFilter.all.rawValue
+
+    private var filter: ProjectListFilter {
+        get { ProjectListFilter(rawValue: filterRawValue) ?? .all }
+        nonmutating set { filterRawValue = newValue.rawValue }
+    }
+
+    private var visibleProjects: [Project] {
+        filter.apply(to: store.projects)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Text("Projects")
