@@ -106,11 +106,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] paths in
                 guard let self else { return }
-                for path in paths {
-                    self.attentionTracker.stopTracking(projectPath: path)
-                    if self.projectTabs[path] != nil {
-                        self.cleanupTabGroup(for: path)
-                    }
+                for path in paths where self.projectTabs[path] != nil {
+                    // cleanupTabGroup also calls attentionTracker.stopTracking.
+                    self.cleanupTabGroup(for: path)
                 }
             }
     }
