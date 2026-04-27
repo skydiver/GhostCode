@@ -3,6 +3,7 @@ import Combine
 
 struct GhostCodeTabBar: View {
     @ObservedObject var tabGroup: ProjectTabGroup
+    var attentionTabs: Set<UUID>
     var onNewShellTab: () -> Void
     var onNewAITab: () -> Void
     var onCloseTab: (Int) -> Void
@@ -19,6 +20,7 @@ struct GhostCodeTabBar: View {
                     tab: tab,
                     isActive: index == tabGroup.activeTabIndex,
                     isDragging: draggingTabId == tab.id,
+                    hasAttention: attentionTabs.contains(tab.id),
                     onSelect: { onSelectTab(index) },
                     onClose: { onCloseTab(index) },
                     onCloseOthers: { onCloseOtherTabs(index) }
@@ -134,20 +136,25 @@ private struct TabMidpointKey: PreferenceKey {
 
 private struct TabBarItem: View {
     @StateObject private var titleProvider: TabTitleProvider
+    @EnvironmentObject private var pulseClock: PulseClock
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let kind: TabKind
     let isActive: Bool
     let isDragging: Bool
+    let hasAttention: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
     let onCloseOthers: () -> Void
 
-    init(tab: TabItem, isActive: Bool, isDragging: Bool,
+    init(tab: TabItem, isActive: Bool, isDragging: Bool, hasAttention: Bool,
          onSelect: @escaping () -> Void, onClose: @escaping () -> Void,
          onCloseOthers: @escaping () -> Void) {
         _titleProvider = StateObject(wrappedValue: TabTitleProvider(tab: tab))
         self.kind = tab.kind
         self.isActive = isActive
         self.isDragging = isDragging
+        self.hasAttention = hasAttention
         self.onSelect = onSelect
         self.onClose = onClose
         self.onCloseOthers = onCloseOthers
@@ -156,11 +163,25 @@ private struct TabBarItem: View {
     @State private var isHovering = false
     @State private var isCloseHovering = false
 
+    private var dotOpacity: Double {
+        guard hasAttention, !reduceMotion else { return 1.0 }
+        return pulseClock.phase ? 1.0 : 0.35
+    }
+
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(kind == .ai ? Color.blue : Color.green)
-                .frame(width: 7, height: 7)
+            ZStack {
+                if hasAttention && reduceMotion {
+                    Circle()
+                        .stroke(kind == .ai ? Color.blue : Color.green, lineWidth: 1.5)
+                        .frame(width: 11, height: 11)
+                }
+                Circle()
+                    .fill(kind == .ai ? Color.blue : Color.green)
+                    .frame(width: 7, height: 7)
+                    .opacity(dotOpacity)
+            }
+            .animation(.easeInOut(duration: 0.7), value: dotOpacity)
 
             Text(titleProvider.displayTitle)
                 .font(.system(size: 12))

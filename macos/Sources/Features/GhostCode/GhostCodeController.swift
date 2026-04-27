@@ -24,6 +24,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     let commandStore = CommandStore()
     let commandPaletteState = CommandPaletteState()
     let attentionTracker = ProjectAttentionTracker()
+    let pulseClock = PulseClock()
     private var attentionBridgeCancellable: AnyCancellable?
 
     // The project path whose terminals are currently displayed in the center pane
@@ -116,6 +117,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         let leftView = NSHostingController(
             rootView: ProjectListView(
                 store: projectStore,
+                pulseClock: pulseClock,
                 onSelectProject: { [weak self] project in
                     self?.activateProject(project)
                 }
@@ -480,6 +482,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
             let container = ProjectTerminalContainer(
                 tabGroup: tabGroup,
+                attentionTracker: self.attentionTracker,
                 ghostty: self.ghostty,
                 onNewShellTab: { [weak self] in
                     self?.createShellTab(projectPath: project.path)
@@ -497,7 +500,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                     self?.closeOtherTabs(keepIndex: index, projectPath: project.path)
                 }
             )
-            let hostingView = NSHostingView(rootView: container)
+            let hostingView = NSHostingView(rootView: container.environmentObject(self.pulseClock))
             hostingView.sizingOptions = []
             hostingView.translatesAutoresizingMaskIntoConstraints = false
             hostingView.frame = self.centerContainer.bounds

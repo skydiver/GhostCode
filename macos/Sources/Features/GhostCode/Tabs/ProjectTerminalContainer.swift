@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProjectTerminalContainer: View {
     @ObservedObject var tabGroup: ProjectTabGroup
+    @ObservedObject var attentionTracker: ProjectAttentionTracker
     let ghostty: Ghostty.App
     var onNewShellTab: () -> Void
     var onNewAITab: () -> Void
@@ -13,6 +14,7 @@ struct ProjectTerminalContainer: View {
         VStack(spacing: 0) {
             GhostCodeTabBar(
                 tabGroup: tabGroup,
+                attentionTabs: attentionTracker.attentionTabs,
                 onNewShellTab: onNewShellTab,
                 onNewAITab: onNewAITab,
                 onCloseTab: onCloseTab,

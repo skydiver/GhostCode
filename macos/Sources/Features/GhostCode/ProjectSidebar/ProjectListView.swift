@@ -3,7 +3,7 @@ import SwiftUI
 /// The left sidebar view showing the project list.
 struct ProjectListView: View {
     @ObservedObject var store: ProjectStore
-    @StateObject private var pulseClock = PulseClock()
+    @ObservedObject var pulseClock: PulseClock
     let onSelectProject: (Project) -> Void
 
     @State private var gitRefreshTimer = Timer.publish(
