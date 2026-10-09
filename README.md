@@ -124,6 +124,8 @@ JSONC (JSON with Comments) is supported across all config files. See [customizat
 
 ## Building
 
+For a step-by-step setup — cloning, signing, running, tests, logs, and troubleshooting — see the [Development Guide](GhostCode/docs/development.md).
+
 ### Requirements
 
 - macOS with **Xcode 26** (macOS 26 SDK)
