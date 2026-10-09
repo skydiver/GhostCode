@@ -46,12 +46,12 @@ Requires macOS 13.0 or later. Runs natively on both Apple Silicon and Intel Macs
 
 ## Screenshots
 
-|                                                                                             |                                                                                           |
-| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [![Splash screen](.assets/screenshot-splash.png)](.assets/screenshot-splash.png)            | [![Project landing page](.assets/screenshot-landing.png)](.assets/screenshot-landing.png) |
-| Splash screen with project list and command palette                                         | Project landing page with binary picker                                                   |
-| [![Claude Code terminal](.assets/screenshot-terminal.png)](.assets/screenshot-terminal.png) | [![OpenCode terminal](.assets/screenshot-opencode.png)](.assets/screenshot-opencode.png)  |
-| Active Claude Code session                                                                  | OpenCode session with command palette                                                     |
+|                                                                                                               |                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [![Splash screen](GhostCode/assets/screenshot-splash.png)](GhostCode/assets/screenshot-splash.png)            | [![Project landing page](GhostCode/assets/screenshot-landing.png)](GhostCode/assets/screenshot-landing.png) |
+| Splash screen with project list and command palette                                                           | Project landing page with binary picker                                                                     |
+| [![Claude Code terminal](GhostCode/assets/screenshot-terminal.png)](GhostCode/assets/screenshot-terminal.png) | [![OpenCode terminal](GhostCode/assets/screenshot-opencode.png)](GhostCode/assets/screenshot-opencode.png)  |
+| Active Claude Code session                                                                                    | OpenCode session with command palette                                                                       |
 
 ## Features
 
@@ -97,12 +97,32 @@ JSONC (JSON with Comments) is supported across all config files.
 | Codex       | —                  | —            |
 | OpenCode    | —                  | —            |
 
+## Repository Layout
+
+| Path         | Contents                                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `Ghostty/`   | Upstream [Ghostty](https://github.com/ghostty-org/ghostty) plus the small set of patches GhostCode needs (core and app). |
+| `GhostCode/` | Everything GhostCode owns: Swift sources, tests, docs, assets, release export options, and scripts.                      |
+
+The Xcode project lives in `Ghostty/macos/` and compiles `GhostCode/Sources` and `GhostCode/Tests` into the same app and test targets.
+
 ## Building
 
 GhostCode requires building the Ghostty core (Zig) and then the macOS app (Xcode).
 
-1. **Build the Ghostty core** — follow the instructions in [HACKING.md](HACKING.md) to set up the Zig toolchain and build `libghostty`.
-2. **Build the macOS app** — open `macos/Ghostty.xcodeproj` in Xcode and build the **GhostCode** scheme.
+1. **Build the Ghostty core** — follow the instructions in [HACKING.md](Ghostty/HACKING.md) to set up the Zig toolchain, then run `zig build` from the `Ghostty/` folder.
+2. **Build the macOS app** — open `Ghostty/macos/Ghostty.xcodeproj` in Xcode and build the **Ghostty** scheme (it produces `GhostCode.app`).
+
+## Syncing with Upstream Ghostty
+
+Each sync lands as a single commit that records the upstream commit in a `Ghostty-Upstream:` trailer, which the next sync uses as its base:
+
+```sh
+git fetch upstream
+GhostCode/scripts/sync-upstream.sh upstream/main
+```
+
+Only files GhostCode patched inside `Ghostty/` can conflict. Resolve them, `git add`, then `git cherry-pick --continue`.
 
 The bundle identifier is `com.flydev.ghostcode`, so GhostCode can be installed alongside Ghostty without conflict.
 

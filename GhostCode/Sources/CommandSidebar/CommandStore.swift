@@ -237,7 +237,7 @@ final class CommandStore: ObservableObject {
     private static let defaultJSONC = """
     {
         // GhostCode Command Palette
-        // Full reference: https://github.com/skydiver/GhostCode/blob/main/docs/customizations.md
+        // Full reference: https://github.com/skydiver/GhostCode/blob/HEAD/GhostCode/docs/customizations.md
         //
         // Quick schema:
         //   sections[]: { name, layout?: "flow"|"list"|"tiles", items[] }

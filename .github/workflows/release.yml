@@ -50,6 +50,7 @@ jobs:
           echo "$PWD/zig-aarch64-macos-0.15.2" >> $GITHUB_PATH
 
       - name: Build XCFramework
+        working-directory: Ghostty
         run: zig build -Demit-xcframework -Demit-macos-app=false -Doptimize=ReleaseFast
 
       # ── Keychain & Signing ─────────────────────────────────
@@ -93,7 +94,7 @@ jobs:
       - name: Archive
         run: |
           xcodebuild archive \
-            -project macos/Ghostty.xcodeproj \
+            -project Ghostty/macos/Ghostty.xcodeproj \
             -scheme Ghostty \
             -configuration Release \
             -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
@@ -108,7 +109,7 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
             -exportPath $RUNNER_TEMP/export \
-            -exportOptionsPlist macos/ExportOptions.plist
+            -exportOptionsPlist GhostCode/ExportOptions.plist
 
       # ── Notarize ───────────────────────────────────────────
       - name: Create ZIP for notarization
