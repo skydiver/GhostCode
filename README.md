@@ -14,13 +14,15 @@
   ·
   <a href="#building">Building</a>
   ·
+  <a href="#syncing-with-upstream-ghostty">Upstream</a>
+  ·
   <a href="#license-and-attribution">License</a>
 </p>
 
 > [!IMPORTANT]
-> **GhostCode is an independent, unofficial fork of [Ghostty](https://github.com/ghostty-org/ghostty) v1.3.1.**
+> **GhostCode is an independent, unofficial fork of [Ghostty](https://github.com/ghostty-org/ghostty).**
 >
-> All terminal emulation is provided by Ghostty's core engine. GhostCode adds a SwiftUI application layer on top for AI coding workflows. It does not track upstream Ghostty changes.
+> All terminal emulation is provided by Ghostty's core engine. GhostCode adds a SwiftUI application layer on top for AI coding workflows, and periodically syncs with upstream Ghostty (see [Syncing with Upstream Ghostty](#syncing-with-upstream-ghostty)).
 >
 > GhostCode is **not affiliated with, endorsed by, or supported by** the Ghostty project or Mitchell Hashimoto. The original Ghostty source code is licensed under the MIT License — Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors.
 
@@ -87,7 +89,7 @@ All configuration lives in `~/.config/ghostcode/`:
 | `projects.jsonc` | Project directory list                                |
 | `commands.jsonc` | Command palette buttons and sections                  |
 
-JSONC (JSON with Comments) is supported across all config files.
+JSONC (JSON with Comments) is supported across all config files. See [customizations.md](GhostCode/docs/customizations.md) for the full command palette format.
 
 ## Supported Binaries
 
@@ -99,32 +101,77 @@ JSONC (JSON with Comments) is supported across all config files.
 
 ## Repository Layout
 
-| Path         | Contents                                                                                                                 |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `Ghostty/`   | Upstream [Ghostty](https://github.com/ghostty-org/ghostty) plus the small set of patches GhostCode needs (core and app). |
-| `GhostCode/` | Everything GhostCode owns: Swift sources, tests, docs, assets, release export options, and scripts.                      |
+```
+.
+├── Makefile                  Build, test, and sync commands (run `make` for the list)
+├── README.md
+├── LICENSE
+├── .github/workflows/        Release workflow (build, sign, notarize, publish)
+├── Ghostty/                  Upstream Ghostty plus the patches GhostCode needs
+│   ├── src/                  Ghostty core (Zig)
+│   └── macos/                Xcode project and Ghostty's macOS app layer
+└── GhostCode/                Everything GhostCode owns
+    ├── Sources/              SwiftUI app layer (sidebars, tabs, config, startup screen)
+    ├── Tests/                Unit tests for GhostCode
+    ├── docs/                 User documentation (see customizations.md)
+    ├── assets/               README screenshots
+    ├── scripts/              sync-upstream.sh
+    └── ExportOptions.plist   Release export settings
+```
 
-The Xcode project lives in `Ghostty/macos/` and compiles `GhostCode/Sources` and `GhostCode/Tests` into the same app and test targets.
+- `Ghostty/` stays as close to upstream as possible: GhostCode only patches the files it must (app entry points, branding, and a small core change for `hush-login`). This keeps upstream syncs small.
+- The Xcode project lives in `Ghostty/macos/` and compiles `GhostCode/Sources` and `GhostCode/Tests` into the same app and test targets, because GhostCode builds directly on Ghostty's macOS app layer.
 
 ## Building
 
-GhostCode requires building the Ghostty core (Zig) and then the macOS app (Xcode).
+### Requirements
 
-1. **Build the Ghostty core** — follow the instructions in [HACKING.md](Ghostty/HACKING.md) to set up the Zig toolchain, then run `zig build` from the `Ghostty/` folder.
-2. **Build the macOS app** — open `Ghostty/macos/Ghostty.xcodeproj` in Xcode and build the **Ghostty** scheme (it produces `GhostCode.app`).
+- macOS with **Xcode 26** (macOS 26 SDK)
+- **Zig 0.16** — `brew install zig@0.16`
+
+See Ghostty's [HACKING.md](Ghostty/HACKING.md) for more on the Zig toolchain.
+
+### Make targets
+
+Run `make` with no arguments to list every target.
+
+| Command           | What it does                                                         |
+| ----------------- | -------------------------------------------------------------------- |
+| `make build`      | Build the app (Debug). Builds the Ghostty core first if it's missing |
+| `make run`        | Quit the running app, build, then relaunch                           |
+| `make test`       | Run the Xcode unit tests (UI tests skipped)                          |
+| `make test-core`  | Run the Ghostty core (Zig) tests. `TEST_FILTER=name` narrows them    |
+| `make core`       | Rebuild the Ghostty core and `GhosttyKit.xcframework`                |
+| `make release`    | Build the core (ReleaseFast) and the app (Release)                   |
+| `make sync`       | Sync `Ghostty/` with upstream (see below)                            |
+| `make config`     | Open `~/.config/ghostcode/config`                                    |
+| `make clean`      | Remove app build output (`build/`)                                   |
+| `make clean-core` | Remove Zig build output and the xcframework                          |
+
+The app is built to `build/Build/Products/Debug/GhostCode.app`. Builds use the project's signing settings; add `ADHOC=1` to sign ad hoc (no Apple team needed), e.g. `make run ADHOC=1`.
+
+To work in Xcode instead, run `make core` once, then open `Ghostty/macos/Ghostty.xcodeproj` and build the **Ghostty** scheme (it produces `GhostCode.app`).
+
+The bundle identifier is `com.flydev.ghostcode`, so GhostCode can be installed alongside Ghostty without conflict.
 
 ## Syncing with Upstream Ghostty
 
-Each sync lands as a single commit that records the upstream commit in a `Ghostty-Upstream:` trailer, which the next sync uses as its base:
+One-time setup:
 
 ```sh
-git fetch upstream
-GhostCode/scripts/sync-upstream.sh upstream/main
+git remote add upstream https://github.com/ghostty-org/ghostty.git
 ```
 
-Only files GhostCode patched inside `Ghostty/` can conflict. Resolve them, `git add`, then `git cherry-pick --continue`.
+Then, to bring `Ghostty/` up to date:
 
-The bundle identifier is `com.flydev.ghostcode`, so GhostCode can be installed alongside Ghostty without conflict.
+```sh
+make sync                      # sync to upstream/main
+make sync UPSTREAM=<commit>    # or to a specific upstream commit
+```
+
+Each sync lands as **one commit** on top of the current branch — no merge commits, no rewritten history. The commit records the upstream commit in a `Ghostty-Upstream:` trailer, which the next sync uses as its base, so only new upstream changes are applied.
+
+Only files GhostCode patched inside `Ghostty/` can conflict. Resolve them, `git add`, then `git cherry-pick --continue`. After a sync, run `make core` and `make test` before pushing.
 
 ## License and Attribution
 
