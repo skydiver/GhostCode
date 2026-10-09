@@ -29,6 +29,8 @@ const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
+const TitleDialog = @import("title_dialog.zig").TitleDialog;
+const Overrides = @import("Overrides.zig");
 
 const log = std.log.scoped(.gtk_ghostty_window);
 
@@ -213,12 +215,28 @@ pub const Window = extern struct {
                 },
             );
         };
+
+        pub const @"title-override" = struct {
+            pub const name = "title-override";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                ?[:0]const u8,
+                .{
+                    .default = null,
+                    .accessor = C.privateStringFieldAccessor("title_override"),
+                },
+            );
+        };
     };
 
     const Private = struct {
         /// Whether this window is a quick terminal. If it is then it
         /// behaves slightly differently under certain scenarios.
         quick_terminal: bool = false,
+
+        /// Timeout source to react to this window becoming (in)active.
+        handle_active_state_source: ?c_uint = null,
 
         /// The window decoration override. If this is not set then we'll
         /// inherit whatever the config has. This allows overriding the
@@ -246,6 +264,10 @@ pub const Window = extern struct {
         /// For now, this logic is more similar to our legacy GTK side.
         surface_init: bool = false,
 
+        /// True if the running program requested a resize (see
+        /// resizeSurface) that toplevelComputeSize should not override.
+        resize_requested: bool = false,
+
         /// See tabOverviewOpen for why we have this.
         tab_overview_focus_timer: ?c_uint = null,
 
@@ -255,6 +277,9 @@ pub const Window = extern struct {
         /// Tab page that the context menu was opened for.
         /// setup by `setup-menu`.
         context_menu_page: ?*adw.TabPage = null,
+
+        /// The manually overridden title.
+        title_override: ?[:0]const u8 = null,
 
         // Template bindings
         tab_overview: *adw.TabOverview,
@@ -362,6 +387,7 @@ pub const Window = extern struct {
             .init("prompt-surface-title", actionPromptSurfaceTitle, null),
             .init("prompt-tab-title", actionPromptTabTitle, null),
             .init("prompt-context-tab-title", actionPromptContextTabTitle, null),
+            .init("prompt-window-title", actionPromptWindowTitle, null),
             .init("ring-bell", actionRingBell, null),
             .init("split-right", actionSplitRight, null),
             .init("split-left", actionSplitLeft, null),
@@ -387,26 +413,22 @@ pub const Window = extern struct {
     /// Create a new tab with the given parent. The tab will be inserted
     /// at the position dictated by the `window-new-tab-position` config.
     /// The new tab will be selected.
-    pub fn newTab(self: *Self, parent_: ?*CoreSurface) void {
-        _ = self.newTabPage(parent_, .tab, .none);
+    pub fn newTab(self: *Self, parent_: ?*CoreSurface, overrides: Overrides) void {
+        _ = self.newTabPage(parent_, .tab, .{
+            .command = overrides.command,
+            .shell_integration = overrides.shell_integration,
+            .working_directory = overrides.working_directory,
+            .title = overrides.title,
+        });
     }
 
-    pub fn newTabForWindow(
-        self: *Self,
-        parent_: ?*CoreSurface,
-        overrides: struct {
-            command: ?configpkg.Command = null,
-            working_directory: ?[:0]const u8 = null,
-            title: ?[:0]const u8 = null,
-
-            pub const none: @This() = .{};
-        },
-    ) void {
+    pub fn newTabForWindow(self: *Self, parent_: ?*CoreSurface, overrides: Overrides) void {
         _ = self.newTabPage(
             parent_,
             .window,
             .{
                 .command = overrides.command,
+                .shell_integration = overrides.shell_integration,
                 .working_directory = overrides.working_directory,
                 .title = overrides.title,
             },
@@ -417,13 +439,7 @@ pub const Window = extern struct {
         self: *Self,
         parent_: ?*CoreSurface,
         context: apprt.surface.NewSurfaceContext,
-        overrides: struct {
-            command: ?configpkg.Command = null,
-            working_directory: ?[:0]const u8 = null,
-            title: ?[:0]const u8 = null,
-
-            pub const none: @This() = .{};
-        },
+        overrides: Overrides,
     ) *adw.TabPage {
         const priv: *Private = self.private();
         const tab_view = priv.tab_view;
@@ -433,6 +449,7 @@ pub const Window = extern struct {
             priv.config,
             .{
                 .command = overrides.command,
+                .shell_integration = overrides.shell_integration,
                 .working_directory = overrides.working_directory,
                 .title = overrides.title,
             },
@@ -599,6 +616,29 @@ pub const Window = extern struct {
         assert(desired_pos < total);
 
         return tab_view.reorderPage(page, desired_pos) != 0;
+    }
+
+    pub fn moveTabToNewWindow(self: *Self, surface: *Surface) bool {
+        const tab_view = self.private().tab_view;
+        const tab = ext.getAncestor(
+            Tab,
+            surface.as(gtk.Widget),
+        ) orelse return false;
+        const page = tab_view.getPage(tab.as(gtk.Widget));
+
+        // Skip if this is the only tab in the existing window
+        if (tab_view.getNPages() <= 1) return false;
+
+        const app = Application.default();
+        const window = Window.new(app, .none);
+
+        tab_view.transferPage(
+            page,
+            window.private().tab_view,
+            0,
+        );
+        window.as(gtk.Window).present();
+        return true;
     }
 
     pub fn toggleTabOverview(self: *Self) void {
@@ -855,6 +895,38 @@ pub const Window = extern struct {
         }
     }
 
+    /// Callback to handle this window becoming active or inactive.
+    /// Triggered by propIsActive with a timeout to debounce temporary
+    /// changes in active state.
+    fn handleActiveState(ud: ?*anyopaque) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(ud orelse return 0));
+        const priv = self.private();
+        priv.handle_active_state_source = null;
+
+        // Hide quick-terminal if set to autohide
+        if (self.isQuickTerminal()) {
+            if (self.getConfig()) |cfg| {
+                if (cfg.get().@"quick-terminal-autohide" and
+                    self.as(gtk.Window).isActive() == 0 and
+                    self.as(gtk.Widget).isVisible() == 1)
+                {
+                    self.toggleVisibility();
+                }
+            }
+        }
+
+        // Don't change urgency if we're not the active window.
+        if (self.as(gtk.Window).isActive() == 0) return 0;
+
+        self.winproto().setUrgent(false) catch |err| {
+            log.warn(
+                "winproto failed to reset urgency={}",
+                .{err},
+            );
+        };
+        return 0;
+    }
+
     //---------------------------------------------------------------
     // Properties
 
@@ -887,6 +959,53 @@ pub const Window = extern struct {
         if (priv.window_decoration) |v| return v;
         if (priv.config) |v| return v.get().@"window-decoration";
         return .auto;
+    }
+
+    /// Resize the window so that the given surface is the given size, as
+    /// requested by the running program. See `apprt.action.ResizeWindow`.
+    /// This is only done if the surface is the only terminal in the window
+    /// and the compositor doesn't own the window size.
+    pub fn resizeSurface(
+        self: *Self,
+        surface: *Surface,
+        size: apprt.action.ResizeWindow,
+    ) bool {
+        if (self.isQuickTerminal() or
+            self.isMaximized() or
+            self.isFullscreen() or
+            self.isTiled()) return false;
+        if (self.getTabView().getNPages() != 1) return false;
+        const tree = ext.getAncestor(
+            SplitTree,
+            surface.as(gtk.Widget),
+        ) orelse return false;
+        if (tree.getIsSplit()) return false;
+
+        // The requested size is in the surface's content scale, which also
+        // includes the font DPI, so we compute the change in device pixels
+        // and then convert it to the window's logical pixels. Resizing the
+        // window by the change accounts for the headerbar and tab bar.
+        const scale = surface.getContentScale();
+        const current = surface.getSize();
+        const factor: f32 = @floatFromInt(self.as(gtk.Widget).getScaleFactor());
+        const dw = resizeDelta(size.width, scale.x, current.width, factor);
+        const dh = resizeDelta(size.height, scale.y, current.height, factor);
+
+        const widget = self.as(gtk.Widget);
+        self.private().resize_requested = true;
+        self.as(gtk.Window).setDefaultSize(
+            widget.getWidth() + dw,
+            widget.getHeight() + dh,
+        );
+        return true;
+    }
+
+    /// Returns the change in logical pixels from the current device pixel
+    /// size to the requested size, or zero if the requested size is zero.
+    fn resizeDelta(requested: u32, scale: f32, current: u32, factor: f32) c_int {
+        if (requested == 0) return 0;
+        const px = @as(f32, @floatFromInt(requested)) * scale;
+        return @intFromFloat(@round((px - @as(f32, @floatFromInt(current))) / factor));
     }
 
     /// Toggle the window decorations for this window.
@@ -954,6 +1073,12 @@ pub const Window = extern struct {
 
     fn isMaximized(self: *Window) bool {
         return self.as(gtk.Window).isMaximized() != 0;
+    }
+
+    fn isTiled(self: *Window) bool {
+        const surface = self.as(gtk.Native).getSurface() orelse return false;
+        const toplevel = gobject.ext.cast(gdk.Toplevel, surface) orelse return false;
+        return toplevel.getState().tiled;
     }
 
     fn getHeaderbarVisible(self: *Self) bool {
@@ -1071,47 +1196,42 @@ pub const Window = extern struct {
         self.syncAppearance();
     }
 
-    fn propGdkSurfaceHeight(
-        _: *gdk.Surface,
-        _: *gobject.ParamSpec,
-        self: *Self,
-    ) callconv(.c) void {
-        // X11 needs to fix blurring on resize, but winproto implementations
-        // could do anything.
-        self.private().winproto.resizeEvent() catch |err| {
-            log.warn(
-                "winproto resize event failed error={}",
-                .{err},
-            );
-        };
-    }
-
     fn propIsActive(
         _: *gtk.Window,
         _: *gobject.ParamSpec,
         self: *Self,
     ) callconv(.c) void {
-        // Hide quick-terminal if set to autohide
-        if (self.isQuickTerminal()) {
-            if (self.getConfig()) |cfg| {
-                if (cfg.get().@"quick-terminal-autohide" and self.as(gtk.Window).isActive() == 0) {
-                    self.toggleVisibility();
-                }
-            }
-        }
+        const priv = self.private();
 
-        // Don't change urgency if we're not the active window.
-        if (self.as(gtk.Window).isActive() == 0) return;
-
-        self.winproto().setUrgent(false) catch |err| {
-            log.warn(
-                "winproto failed to reset urgency={}",
-                .{err},
+        // Use a timeout callback to wait for focus state to settle,
+        // because depending on the windowing backend the window might
+        // become inactive and immediately active again. This happens
+        // e.g. on Wayland when opening a context menu or a submenu
+        // inside a context menu.
+        if (priv.handle_active_state_source == null) {
+            priv.handle_active_state_source = glib.timeoutAddFull(
+                // Use priority of an idle callback instead of the higher
+                // default timeout priority. This allows us to use a shorter
+                // timeout duration.
+                glib.PRIORITY_DEFAULT_IDLE,
+                // 50ms was chosen to be conservative. From testing we know
+                // that, depending on the backend and system performance, a
+                // shorter timeout or just an idle callback can be enough for
+                // the focus to settle. On the other hand a delay of e.g. 10ms
+                // does not work reliably on some slow systems. The downside
+                // of a high value is that some operations in handleActiveState,
+                // e.g. hiding the quick-terminal, will be visibly delayed.
+                // However, 50ms should barely be noticeable. We can change
+                // this in the future if necessary.
+                50,
+                handleActiveState,
+                self,
+                null,
             );
-        };
+        }
     }
 
-    fn propGdkSurfaceWidth(
+    fn propGdkSurfaceDims(
         _: *gdk.Surface,
         _: *gobject.ParamSpec,
         self: *Self,
@@ -1124,6 +1244,45 @@ pub const Window = extern struct {
                 .{err},
             );
         };
+    }
+
+    fn toplevelComputeSize(
+        _: *gdk.Toplevel,
+        size: *gdk.ToplevelSize,
+        self: *Self,
+    ) callconv(.c) void {
+        // The compositor/quick terminal own the size in these states.
+        if (self.isMaximized() or
+            self.isFullscreen() or
+            self.isQuickTerminal()) return;
+
+        // Let GTK apply the default size set by a requested resize.
+        const priv = self.private();
+        if (priv.resize_requested) {
+            priv.resize_requested = false;
+            return;
+        }
+
+        // If there's no GdkSurface yet these dimensions will be zero size which
+        // will make the window start out as small as possible. These checks ensure
+        // we don't start with a 0, 0 window size.
+        const gdk_surface = self.as(gtk.Native).getSurface() orelse return;
+        const w = gdk_surface.getWidth();
+        const h = gdk_surface.getHeight();
+        if (w <= 0 or h <= 0) return;
+
+        // GTK clamps the requested size to the compositor-reported bounds, which
+        // go stale when the window moves to a larger monitor. Only re-assert the
+        // current size when it exceeds those bounds; otherwise let GTK's default
+        // sizing win so a freshly-mapped window isn't forced to a tiny size.
+        var bounds_w: c_int = undefined;
+        var bounds_h: c_int = undefined;
+        size.getBounds(&bounds_w, &bounds_h);
+
+        if (bounds_w <= 0 or bounds_h <= 0) return;
+        if (w <= bounds_w and h <= bounds_h) return;
+
+        size.setSize(w, h);
     }
 
     fn propFullscreened(
@@ -1206,6 +1365,57 @@ pub const Window = extern struct {
         });
     }
 
+    pub fn setTitleOverride(self: *Self, title: ?[]const u8) void {
+        const priv: *Private = self.private();
+
+        if (priv.title_override) |v| glib.free(@ptrCast(@constCast(v)));
+        priv.title_override = null;
+
+        if (title) |v| priv.title_override = glib.ext.dupeZ(u8, v);
+
+        self.as(gobject.Object).notifyByPspec(properties.@"title-override".impl.param_spec);
+    }
+
+    fn titleDialogSet(_: *TitleDialog, title_: [*:0]const u8, self: *Self) callconv(.c) void {
+        const title = std.mem.span(title_);
+        self.setTitleOverride(if (title.len == 0) null else title);
+    }
+
+    pub fn promptWindowTitle(self: *Self) void {
+        const priv: *Private = self.private();
+
+        var value = std.mem.zeroes(gobject.Value);
+        _ = value.init(gobject.ext.types.string);
+        defer value.unset();
+
+        self.as(gobject.Object).getProperty("title", &value);
+
+        const title_: ?[*:0]const u8 = value.getString();
+        const title: ?[:0]const u8 = if (title_) |v| std.mem.span(v) else null;
+
+        const dialog = TitleDialog.new(.window, priv.title_override orelse title);
+        _ = TitleDialog.signals.set.connect(
+            dialog,
+            *Self,
+            titleDialogSet,
+            self,
+            .{},
+        );
+
+        dialog.present(self.as(gtk.Widget));
+    }
+
+    fn closureTitle(
+        _: *Self,
+        _: ?*Config,
+        title_: ?[*:0]const u8,
+        title_override_: ?[*:0]const u8,
+    ) callconv(.c) ?[*:0]const u8 {
+        if (title_override_) |v| return glib.ext.dupeZ(u8, std.mem.span(v));
+        if (title_) |v| return glib.ext.dupeZ(u8, std.mem.span(v));
+        return glib.ext.dupeZ(u8, "Ghostty");
+    }
+
     fn closureSubtitle(
         _: *Self,
         config_: ?*Config,
@@ -1227,7 +1437,14 @@ pub const Window = extern struct {
     fn dispose(self: *Self) callconv(.c) void {
         const priv = self.private();
 
-        priv.command_palette.set(null);
+        if (priv.handle_active_state_source) |v| {
+            if (glib.Source.remove(v) == 0) {
+                log.warn("unable to remove handle active state source", .{});
+            }
+            priv.handle_active_state_source = null;
+        }
+
+        priv.command_palette.deinit();
 
         if (priv.config) |v| {
             v.unref();
@@ -1250,7 +1467,8 @@ pub const Window = extern struct {
     fn finalize(self: *Self) callconv(.c) void {
         const priv = self.private();
         priv.tab_bindings.unref();
-        priv.winproto.deinit(Application.default().allocator());
+        priv.winproto.deinit();
+        if (priv.title_override) |v| glib.free(@ptrCast(@constCast(v)));
 
         gobject.Object.virtual_methods.finalize.call(
             Class.parent,
@@ -1282,22 +1500,54 @@ pub const Window = extern struct {
             _ = gobject.Object.signals.notify.connect(
                 gdk_surface,
                 *Self,
-                propGdkSurfaceWidth,
+                propGdkSurfaceDims,
                 self,
                 .{ .detail = "width" },
             );
             _ = gobject.Object.signals.notify.connect(
                 gdk_surface,
                 *Self,
-                propGdkSurfaceHeight,
+                propGdkSurfaceDims,
                 self,
                 .{ .detail = "height" },
             );
+            // Connect after GTK's compute-size handler so our size wins.
+            if (gobject.ext.cast(gdk.Toplevel, gdk_surface)) |toplevel| {
+                _ = gdk.Toplevel.signals.compute_size.connect(
+                    toplevel,
+                    *Self,
+                    toplevelComputeSize,
+                    self,
+                    .{ .after = true },
+                );
+            }
         }
+
+        // Notify every displayed surface when the compositor changes the
+        // Wayland xdg_toplevel suspended state.
+        _ = gobject.Object.signals.notify.connect(
+            self.as(gtk.Window),
+            *Self,
+            propSuspended,
+            self,
+            .{ .detail = "suspended" },
+        );
 
         // When we are realized we always setup our appearance since this
         // calls some winproto functions.
         self.syncAppearance();
+    }
+
+    fn propSuspended(
+        _: *gtk.Window,
+        _: *gobject.ParamSpec,
+        self: *Self,
+    ) callconv(.c) void {
+        const tab = self.getSelectedTab() orelse return;
+        const tree = tab.getSurfaceTree() orelse return;
+
+        var it = tree.iterator();
+        while (it.next()) |entry| entry.view.updateOcclusion();
     }
 
     fn btnNewTab(_: *adw.SplitButton, self: *Self) callconv(.c) void {
@@ -1875,6 +2125,14 @@ pub const Window = extern struct {
         self.performBindingAction(.prompt_tab_title);
     }
 
+    fn actionPromptWindowTitle(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        self.performBindingAction(.prompt_window_title);
+    }
+
     fn actionSplitRight(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,
@@ -2082,6 +2340,7 @@ pub const Window = extern struct {
                 properties.@"tabs-wide".impl,
                 properties.@"toolbar-style".impl,
                 properties.@"titlebar-style".impl,
+                properties.@"title-override".impl,
             });
 
             // Bindings
@@ -2112,6 +2371,7 @@ pub const Window = extern struct {
             class.bindTemplateCallback("notify_quick_terminal", &propQuickTerminal);
             class.bindTemplateCallback("notify_scale_factor", &propScaleFactor);
             class.bindTemplateCallback("titlebar_style_is_tabs", &closureTitlebarStyleIsTab);
+            class.bindTemplateCallback("computed_title", &closureTitle);
             class.bindTemplateCallback("computed_subtitle", &closureSubtitle);
 
             // Virtual methods

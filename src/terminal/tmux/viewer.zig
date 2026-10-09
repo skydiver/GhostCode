@@ -156,6 +156,9 @@ const COMMAND_QUEUE_INITIAL = 8;
 /// session.
 ///
 pub const Viewer = struct {
+    /// I/O implementation used for all internal state.
+    io: std.Io,
+
     /// Allocator used for all internal state.
     alloc: Allocator,
 
@@ -226,6 +229,9 @@ pub const Viewer = struct {
                         const value = @field(self, u_field.name);
                         switch (u_field.type) {
                             []const u8 => try writer.print("\"{s}\"", .{std.mem.trim(u8, value, " \t\r\n")}),
+                            // Window embeds ArenaAllocator.State; dumping
+                            // `{any}` walks freed/poisoned arena nodes.
+                            []const Window => try writer.print("[{d} windows]", .{value.len}),
                             else => try writer.print("{any}", .{value}),
                         }
                     }
@@ -265,12 +271,13 @@ pub const Viewer = struct {
     ///
     /// The given allocator is used for all internal state. You must
     /// call deinit when you're done with the viewer to free it.
-    pub fn init(alloc: Allocator) Allocator.Error!Viewer {
+    pub fn init(io: std.Io, alloc: Allocator) Allocator.Error!Viewer {
         // Create our initial command queue
         var command_queue: CommandQueue = try .init(alloc, COMMAND_QUEUE_INITIAL);
         errdefer command_queue.deinit(alloc);
 
         return .{
+            .io = io,
             .alloc = alloc,
             .state = .startup_block,
             // The default value here is meaningless. We don't get started
@@ -639,6 +646,7 @@ pub const Viewer = struct {
             panes.deinit(self.alloc);
         }
         for (windows) |window| try initLayout(
+            self.io,
             self.alloc,
             &self.panes,
             &panes,
@@ -723,7 +731,7 @@ pub const Viewer = struct {
         session_id: usize,
     ) (Allocator.Error || std.Io.Writer.Error)!void {
         // Build up a new viewer. Its the easiest way to reset ourselves.
-        var replacement: Viewer = try .init(self.alloc);
+        var replacement: Viewer = try .init(self.io, self.alloc);
         errdefer replacement.deinit();
 
         // Our actions must start out empty so we don't mix arenas
@@ -849,9 +857,13 @@ pub const Viewer = struct {
         content: []const u8,
     ) !void {
         // If there is an error, reset our actions to what it was before.
-        errdefer actions.shrinkRetainingCapacity(actions.items.len);
+        const actions_len = actions.items.len;
+        errdefer actions.shrinkRetainingCapacity(actions_len);
 
         // This stores our new window state from this list-windows output.
+        // Ownership of each Window's layout arena transfers into
+        // `self.windows` via syncLayouts; this list only owns the
+        // ArrayList buffer itself.
         var windows: std.ArrayList(Window) = .empty;
         defer windows.deinit(self.alloc);
 
@@ -893,12 +905,12 @@ pub const Viewer = struct {
             });
         }
 
-        // Setup our windows action so the caller can process GUI
-        // window changes.
-        try actions.append(arena_alloc, .{ .windows = windows.items });
-
-        // Sync up our layouts. This will populate unknown panes, prune, etc.
+        // Sync into self.windows first. The `.windows` action must point at
+        // `self.windows.items` (stable for the duration of next()), not the
+        // temporary list buffer which is freed by the defer above — otherwise
+        // logging/formatting the action is a use-after-free.
         try self.syncLayouts(windows.items);
+        try actions.append(arena_alloc, .{ .windows = self.windows.items });
     }
 
     fn receivedPaneState(
@@ -994,9 +1006,8 @@ pub const Viewer = struct {
 
             // Mouse modes
             t.modes.set(.mouse_event_any, data.mouse_all_flag);
-            t.modes.set(.mouse_event_button, data.mouse_any_flag);
-            t.modes.set(.mouse_event_normal, data.mouse_button_flag);
-            t.modes.set(.mouse_event_x10, data.mouse_standard_flag);
+            t.modes.set(.mouse_event_button, data.mouse_button_flag);
+            t.modes.set(.mouse_event_normal, data.mouse_standard_flag);
             t.modes.set(.mouse_format_utf8, data.mouse_utf8_flag);
             t.modes.set(.mouse_format_sgr, data.mouse_sgr_flag);
 
@@ -1053,10 +1064,7 @@ pub const Viewer = struct {
         // correct but we'll get the active contents soon.
         var stream = t.vtStream();
         defer stream.deinit();
-        stream.nextSlice(content) catch |err| {
-            log.info("failed to process pane history for pane id={}: {}", .{ id, err });
-            return err;
-        };
+        stream.nextSlice(content);
 
         // Populate the active area to be empty since this is only history.
         // We'll fill it with blanks and move the cursor to the top-left.
@@ -1097,10 +1105,7 @@ pub const Viewer = struct {
 
         var stream = t.vtStream();
         defer stream.deinit();
-        stream.nextSlice(content) catch |err| {
-            log.info("failed to process pane visible for pane id={}: {}", .{ id, err });
-            return err;
-        };
+        stream.nextSlice(content);
     }
 
     fn receivedOutput(
@@ -1117,13 +1122,11 @@ pub const Viewer = struct {
 
         var stream = t.vtStream();
         defer stream.deinit();
-        stream.nextSlice(data) catch |err| {
-            log.info("failed to process output for pane id={}: {}", .{ id, err });
-            return err;
-        };
+        stream.nextSlice(data);
     }
 
     fn initLayout(
+        io: std.Io,
         gpa_alloc: Allocator,
         panes_old: *const PanesMap,
         panes_new: *PanesMap,
@@ -1134,6 +1137,7 @@ pub const Viewer = struct {
             .horizontal, .vertical => |layouts| {
                 for (layouts) |l| {
                     try initLayout(
+                        io,
                         gpa_alloc,
                         panes_old,
                         panes_new,
@@ -1158,7 +1162,7 @@ pub const Viewer = struct {
                 // TODO: We need to gracefully handle overflow of our
                 // max cols/width here. In practice we shouldn't hit this
                 // so we cast but its not safe.
-                var t: Terminal = try .init(gpa_alloc, .{
+                var t: Terminal = try .init(io, gpa_alloc, .{
                     .cols = @intCast(layout.width),
                     .rows = @intCast(layout.height),
                 });
@@ -1384,7 +1388,6 @@ const Format = struct {
             .origin_flag,
             // Mouse modes
             .mouse_all_flag,
-            .mouse_any_flag,
             .mouse_button_flag,
             .mouse_standard_flag,
             .mouse_utf8_flag,
@@ -1503,7 +1506,7 @@ fn testViewer(viewer: *Viewer, steps: []const TestStep) !void {
 }
 
 test "immediate exit" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -1523,7 +1526,7 @@ test "immediate exit" {
 }
 
 test "session changed resets state" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -1550,11 +1553,24 @@ test "session changed resets state" {
             } },
             .contains_tags = &.{ .windows, .command },
             .check = (struct {
-                fn check(v: *Viewer, _: []const Viewer.Action) anyerror!void {
+                fn check(v: *Viewer, actions: []const Viewer.Action) anyerror!void {
                     try testing.expectEqual(1, v.session_id);
                     try testing.expectEqual(1, v.windows.items.len);
                     try testing.expectEqual(2, v.panes.count());
                     try testing.expectEqualStrings("3.5a", v.tmux_version);
+
+                    for (actions) |action| switch (action) {
+                        .windows => |windows| {
+                            // The action must reference viewer-owned state,
+                            // not the temporary list used while parsing.
+                            try testing.expectEqual(v.windows.items.ptr, windows.ptr);
+                            try testing.expectEqual(v.windows.items.len, windows.len);
+                            try testing.expectEqual(@as(usize, 0), windows[0].id);
+                            return;
+                        },
+                        else => {},
+                    };
+                    return error.TestExpectedWindowsAction;
                 }
             }).check,
         },
@@ -1614,7 +1630,7 @@ test "session changed resets state" {
 }
 
 test "initial flow" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -1795,7 +1811,7 @@ test "initial flow" {
 }
 
 test "layout change" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -1866,7 +1882,7 @@ test "layout change" {
 }
 
 test "layout_change does not return command when queue not empty" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -1927,7 +1943,7 @@ test "layout_change does not return command when queue not empty" {
 }
 
 test "layout_change returns command when queue was empty" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -1994,7 +2010,7 @@ test "layout_change returns command when queue was empty" {
 }
 
 test "window_add queues list_windows when queue empty" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -2055,7 +2071,7 @@ test "window_add queues list_windows when queue empty" {
 }
 
 test "window_add queues list_windows when queue not empty" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -2111,7 +2127,7 @@ test "window_add queues list_windows when queue not empty" {
 }
 
 test "two pane flow with pane state" {
-    var viewer = try Viewer.init(testing.allocator);
+    var viewer = try Viewer.init(testing.io, testing.allocator);
     defer viewer.deinit();
 
     try testViewer(&viewer, &.{
@@ -2247,8 +2263,8 @@ test "two pane flow with pane state" {
         .{
             .input = .{ .tmux = .{
                 .block_end =
-                \\%0;42;0;1;;;;0;4294967295;4294967295;0;1;0;0;0;0;0;0;0;0;0;;;0;39;8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160
-                \\%4;10;5;1;;;;0;4294967295;4294967295;0;1;0;0;0;0;0;0;0;0;0;;;0;37;8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160
+                \\%0;42;0;1;;;;0;4294967295;4294967295;0;1;0;0;0;0;1;0;0;1;;;0;39;8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160
+                \\%4;10;5;1;;;;0;4294967295;4294967295;0;1;0;0;0;0;0;0;0;0;;;0;37;8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160
                 ,
             } },
             .check = (struct {
@@ -2266,6 +2282,9 @@ test "two pane flow with pane state" {
                         try testing.expect(!t.modes.get(.origin));
                         try testing.expect(!t.modes.get(.keypad_keys));
                         try testing.expect(!t.modes.get(.cursor_keys));
+                        try testing.expect(t.modes.get(.mouse_event_button));
+                        try testing.expect(!t.modes.get(.mouse_event_normal));
+                        try testing.expect(t.modes.get(.mouse_format_sgr));
                     }
                     // Pane 4: cursor at (10, 5), cursor visible, wraparound on
                     {

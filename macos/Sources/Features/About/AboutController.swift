@@ -12,6 +12,7 @@ class AboutController: NSWindowController, NSWindowDelegate {
         window.center()
         window.isMovableByWindowBackground = true
         window.contentView = NSHostingView(rootView: AboutView())
+        window.titlebarAppearsTransparent = true
     }
 
     // MARK: - Functions

@@ -13,4 +13,6 @@ test {
     @import("std").testing.refAllDecls(@This());
     _ = @import("gtk/ext.zig");
     _ = @import("gtk/key.zig");
+    _ = @import("gtk/portal.zig");
+    _ = @import("gtk/scale.zig");
 }

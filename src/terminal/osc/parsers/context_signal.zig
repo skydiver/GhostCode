@@ -6,6 +6,7 @@
 //! and form a stack.
 
 const std = @import("std");
+const lib = @import("../../lib.zig");
 const Parser = @import("../../osc.zig").Parser;
 const OSCCommand = @import("../../osc.zig").Command;
 
@@ -16,6 +17,8 @@ const max_context_id_len = 64;
 
 /// A single OSC 3008 context signal command.
 pub const Command = struct {
+    pub const C = void;
+
     action: Action,
     /// The context identifier. Must be 1-64 characters in the 32..126 byte range.
     id: []const u8,
@@ -160,16 +163,11 @@ pub const Field = enum {
             return switch (self) {
                 .type => .parse(value),
                 .exit => .parse(value),
-                .pid, .pidfdid, .status => value: {
-                    for (value) |c| {
-                        if (c < '0' or c > '9') break :value null;
-                    }
-                    break :value std.fmt.parseInt(
-                        u64,
-                        value,
-                        10,
-                    ) catch null;
-                },
+                .pid, .pidfdid, .status => lib.parseInt(
+                    u64,
+                    value,
+                    10,
+                ) catch null,
                 // String fields
                 .user,
                 .hostname,
@@ -199,11 +197,11 @@ pub const Field = enum {
 ///   start=<id>[;<field>=<value>]*
 ///   end=<id>[;<field>=<value>]*
 pub fn parse(parser: *Parser, _: ?u8) ?*OSCCommand {
-    const writer = parser.writer orelse {
+    const cap = if (parser.capture) |*c| c else {
         parser.state = .invalid;
         return null;
     };
-    const data = writer.buffered();
+    const data = cap.trailing();
     if (data.len == 0) {
         parser.state = .invalid;
         return null;
@@ -367,6 +365,20 @@ test "OSC 3008: end with failure exit" {
     try testing.expect(cmd.context_signal.readOption(.exit).? == .failure);
     try testing.expectEqual(@as(u64, 1), cmd.context_signal.readOption(.status).?);
     try testing.expectEqualStrings("SIGKILL", cmd.context_signal.readOption(.signal).?);
+}
+
+test "OSC 3008: numeric fields reject non-digits" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+    const input = "3008;start=myctx;pid=4_2;pidfdid=+42;status=-1";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .context_signal);
+    try testing.expect(cmd.context_signal.readOption(.pid) == null);
+    try testing.expect(cmd.context_signal.readOption(.pidfdid) == null);
+    try testing.expect(cmd.context_signal.readOption(.status) == null);
 }
 
 test "OSC 3008: unknown fields are ignored" {
