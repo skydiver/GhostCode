@@ -62,21 +62,21 @@ enum AppIcon: Equatable, Codable, Sendable {
         case .official:
             return nil
         case .blueprint:
-            return bundle.image(forResource: "BlueprintImage")!
+            return bundle.image(forResource: "BlueprintImage")
         case .chalkboard:
-            return bundle.image(forResource: "ChalkboardImage")!
+            return bundle.image(forResource: "ChalkboardImage")
         case .glass:
-            return bundle.image(forResource: "GlassImage")!
+            return bundle.image(forResource: "GlassImage")
         case .holographic:
-            return bundle.image(forResource: "HolographicImage")!
+            return bundle.image(forResource: "HolographicImage")
         case .microchip:
-            return bundle.image(forResource: "MicrochipImage")!
+            return bundle.image(forResource: "MicrochipImage")
         case .paper:
-            return bundle.image(forResource: "PaperImage")!
+            return bundle.image(forResource: "PaperImage")
         case .retro:
-            return bundle.image(forResource: "RetroImage")!
+            return bundle.image(forResource: "RetroImage")
         case .xray:
-            return bundle.image(forResource: "XrayImage")!
+            return bundle.image(forResource: "XrayImage")
         case let .custom(file):
             return NSImage(data: file)
         case let .customStyle(customIcon):
