@@ -3,3 +3,6 @@
 .vscode/
 *.log
 xcuserdata/
+
+# make build / make release output
+build/
