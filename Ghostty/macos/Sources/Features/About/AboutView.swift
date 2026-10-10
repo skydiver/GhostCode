@@ -33,8 +33,8 @@ struct AboutView: View {
         var url: URL? {
             switch self {
             case .stable(let version):
-                let slug = version.replacingOccurrences(of: ".", with: "-")
-                return URL(string: "https://ghostty.org/docs/install/release-notes/\(slug)")
+                // GhostCode versions are tagged v<version> by the release workflow.
+                return URL(string: "https://github.com/skydiver/GhostCode/releases/tag/v\(version)")
             default:
                 return nil
             }
