@@ -49,37 +49,24 @@ final class ProjectStore: ObservableObject {
         projects[index].hasAttention = hasAttention
     }
 
+    /// Applies an edited list (order, removals, names). Runtime state — running
+    /// state, git status, attention — comes from the current store, not from the
+    /// edit snapshot, since terminals may have started or exited while editing.
     func replaceProjects(_ newProjects: [Project]) {
         let newPaths = Set(newProjects.map(\.path))
         let removed = projects.map(\.path).filter { !newPaths.contains($0) }
-
-        // Preserve binary, customName, and hasAttention from existing projects
-        var binaryMap: [String: SupportedBinary] = [:]
-        var nameMap: [String: String] = [:]
-        var attentionPaths: Set<String> = []
-        for project in projects {
-            if let binary = project.binary {
-                binaryMap[project.path] = binary
-            }
-            if let custom = project.customName {
-                nameMap[project.path] = custom
-            }
-            if project.hasAttention {
-                attentionPaths.insert(project.path)
-            }
-        }
+        let current = Dictionary(projects.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
 
         projects = newProjects.map { project in
-            let binary = project.binary ?? binaryMap[project.path]
-            let customName = project.customName ?? nameMap[project.path]
+            let existing = current[project.path]
             var rebuilt = Project(
                 path: project.path,
-                customName: customName,
-                state: project.state,
-                binary: binary
+                customName: project.customName ?? existing?.customName,
+                state: existing?.state ?? project.state,
+                binary: project.binary ?? existing?.binary
             )
-            rebuilt.gitStatus = project.gitStatus
-            rebuilt.hasAttention = attentionPaths.contains(project.path)
+            rebuilt.gitStatus = existing?.gitStatus ?? project.gitStatus
+            rebuilt.hasAttention = existing?.hasAttention ?? false
             return rebuilt
         }
         saveToDisk()
@@ -155,8 +142,9 @@ final class ProjectStore: ObservableObject {
             state: existing.state,
             binary: existing.binary
         )
-        // Preserve git status (initializer doesn't take it)
+        // Preserve runtime state the initializer doesn't take
         rebuilt.gitStatus = existing.gitStatus
+        rebuilt.hasAttention = existing.hasAttention
         projects[index] = rebuilt
         saveToDisk()
     }

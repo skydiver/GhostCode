@@ -399,4 +399,49 @@ final class CommandStoreTests: XCTestCase {
         }
         return CommandStore(filePath: tempFile.path)
     }
+
+    // MARK: - Load errors
+
+    func testMalformedFileReportsLoadError() throws {
+        let tempFile = try writeCommands("{ invalid json")
+        let store = CommandStore(filePath: tempFile.path)
+        XCTAssertNotNil(store.loadError)
+    }
+
+    func testLoadErrorNamesTheValidationProblem() throws {
+        let tempFile = try writeCommands("""
+        { "sections": [{ "name": "A", "items": [{ "label": "Both", "text": "x", "executable": "/bin/ls" }] }] }
+        """)
+        let store = CommandStore(filePath: tempFile.path)
+        XCTAssertEqual(store.loadError?.contains("has both 'text' and 'executable'"), true)
+    }
+
+    func testInvalidReloadKeepsLastValidSections() throws {
+        let tempFile = try writeCommands(#"{ "sections": [{ "name": "A", "items": [{ "label": "x", "text": "x" }] }] }"#)
+        let store = CommandStore(filePath: tempFile.path)
+
+        try "{ broken".data(using: .utf8)!.write(to: tempFile)
+        store.reload()
+
+        XCTAssertEqual(store.sections.map(\.name), ["A"])
+        XCTAssertNotNil(store.loadError)
+    }
+
+    func testValidReloadClearsLoadError() throws {
+        let tempFile = try writeCommands("{ broken")
+        let store = CommandStore(filePath: tempFile.path)
+
+        try #"{ "sections": [] }"#.data(using: .utf8)!.write(to: tempFile)
+        store.reload()
+
+        XCTAssertNil(store.loadError)
+    }
+
+    private func writeCommands(_ contents: String) throws -> URL {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-commands-\(UUID().uuidString).jsonc")
+        try contents.data(using: .utf8)!.write(to: tempFile)
+        addTeardownBlock { try? FileManager.default.removeItem(at: tempFile) }
+        return tempFile
+    }
 }

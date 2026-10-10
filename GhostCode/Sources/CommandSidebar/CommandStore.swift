@@ -1,5 +1,8 @@
 import Foundation
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.flydev.ghostcode", category: "commands")
 
 /// Where the icon sits relative to the label.
 /// In tile layout all four positions are honored. In flow/list only `left` and
@@ -147,6 +150,8 @@ struct CommandConfig: Codable {
 /// Watches the backing file for changes and reloads automatically.
 final class CommandStore: ObservableObject {
     @Published private(set) var sections: [CommandSection]
+    /// Why the last load failed, or nil. The palette keeps the last valid sections.
+    @Published private(set) var loadError: String?
 
     private let filePath: String
     private var fileWatcher: DispatchSourceFileSystemObject?
@@ -212,11 +217,39 @@ final class CommandStore: ObservableObject {
     // MARK: - Persistence
 
     private func loadFromDisk() {
-        guard FileManager.default.fileExists(atPath: filePath),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-              let config = try? JSONC.decode(CommandConfig.self, from: data)
-        else { return }
-        sections = config.sections
+        guard FileManager.default.fileExists(atPath: filePath) else { return }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            sections = try JSONC.decode(CommandConfig.self, from: data).sections
+            loadError = nil
+        } catch {
+            // Keep the last valid palette so a half-finished edit doesn't wipe it.
+            let message = Self.describe(error)
+            loadError = message
+            logger.error("Could not load \(self.filePath, privacy: .public): \(message, privacy: .public)")
+        }
+    }
+
+    /// A one-line, user-facing explanation of a load failure.
+    private static func describe(_ error: Error) -> String {
+        guard let decodingError = error as? DecodingError else { return error.localizedDescription }
+        switch decodingError {
+        case .dataCorrupted(let context):
+            // Syntax errors carry the parser's detail (e.g. the offending line) underneath.
+            let detail = (context.underlyingError as NSError?)?.userInfo[NSDebugDescriptionErrorKey] as? String
+            return [context.debugDescription, detail].compactMap { $0 }.joined(separator: " ")
+        case .keyNotFound(let key, let context):
+            return "Missing \"\(key.stringValue)\"\(location(of: context))."
+        case .typeMismatch(_, let context), .valueNotFound(_, let context):
+            return "\(context.debugDescription)\(location(of: context))"
+        @unknown default:
+            return error.localizedDescription
+        }
+    }
+
+    private static func location(of context: DecodingError.Context) -> String {
+        let path = context.codingPath.map { $0.intValue.map(String.init) ?? $0.stringValue }
+        return path.isEmpty ? "" : " at \(path.joined(separator: "."))"
     }
 
     /// Opens the commands file in the system default editor.
@@ -256,7 +289,8 @@ final class CommandStore: ObservableObject {
         //   active project path. When omitted, argv defaults to `[<project_path>]`.
         // - `icon`: SF Symbol name (e.g. "hammer.fill") or "data:image/svg+xml;base64,...".
         // - `iconPosition`: tiles → top|bottom|left|right (default top); flow/list → left|right (default left).
-        // - Saves reload automatically. A validation error empties the palette until fixed.
+        // - Saves reload automatically. If a save has an error, the palette keeps the last
+        //   valid commands and shows the error at the top until the file is fixed.
         "sections": [
             {
                 "name": "Slash Commands",

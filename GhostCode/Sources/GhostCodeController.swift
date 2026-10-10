@@ -28,6 +28,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     let attentionTracker = ProjectAttentionTracker()
     let pulseClock = PulseClock()
     private var attentionBridgeCancellable: AnyCancellable?
+    private var pulseCancellable: AnyCancellable?
     private var removalCancellable: AnyCancellable?
 
     // The project path whose terminals are currently displayed in the center pane
@@ -106,6 +107,15 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                 for path in changed {
                     self?.projectStore.setAttention(path, hasAttention: current.contains(path))
                 }
+            }
+
+        // Pulse only while some tab is waiting on the user.
+        pulseCancellable = attentionTracker.$attentionTabs
+            .map { !$0.isEmpty }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] active in
+                self?.pulseClock.setActive(active)
             }
 
         if let loadError = projectStore.loadError {

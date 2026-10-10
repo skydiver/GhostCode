@@ -4,24 +4,24 @@ import XCTest
 final class JSONCTests: XCTestCase {
     // MARK: - Comment Stripping
 
-    func testStripsNothing() {
+    func testStripsNothing() throws {
         let input = #"{"key": "value"}"#
-        XCTAssertEqual(JSONC.stripComments(input), input)
+        XCTAssertEqual(try JSONC.normalize(input), input)
     }
 
-    func testStripsSingleLineComment() {
+    func testStripsSingleLineComment() throws {
         let input = """
         {
             // this is a comment
             "key": "value"
         }
         """
-        let result = JSONC.stripComments(input)
+        let result = try JSONC.normalize(input)
         XCTAssertFalse(result.contains("//"))
         XCTAssertTrue(result.contains("\"key\": \"value\""))
     }
 
-    func testStripsMultiLineComment() {
+    func testStripsMultiLineComment() throws {
         let input = """
         {
             /* this is
@@ -29,59 +29,59 @@ final class JSONCTests: XCTestCase {
             "key": "value"
         }
         """
-        let result = JSONC.stripComments(input)
+        let result = try JSONC.normalize(input)
         XCTAssertFalse(result.contains("/*"))
         XCTAssertFalse(result.contains("*/"))
         XCTAssertTrue(result.contains("\"key\": \"value\""))
     }
 
-    func testPreservesCommentsInsideStrings() {
+    func testPreservesCommentsInsideStrings() throws {
         let input = #"{"url": "http://example.com", "note": "/* not a comment */"}"#
-        XCTAssertEqual(JSONC.stripComments(input), input)
+        XCTAssertEqual(try JSONC.normalize(input), input)
     }
 
-    func testPreservesSlashSlashInsideStrings() {
+    func testPreservesSlashSlashInsideStrings() throws {
         let input = #"{"path": "C:\\Users\\test", "url": "http://x.com"}"#
-        XCTAssertEqual(JSONC.stripComments(input), input)
+        XCTAssertEqual(try JSONC.normalize(input), input)
     }
 
-    func testStripsInlineComment() {
+    func testStripsInlineComment() throws {
         let input = """
         {
             "key": "value" // inline comment
         }
         """
-        let result = JSONC.stripComments(input)
+        let result = try JSONC.normalize(input)
         XCTAssertFalse(result.contains("inline"))
         XCTAssertTrue(result.contains("\"value\""))
     }
 
-    func testStripsMultipleCommentStyles() {
+    func testStripsMultipleCommentStyles() throws {
         let input = """
         {
             // line comment
             "a": 1, /* block */ "b": 2
         }
         """
-        let result = JSONC.stripComments(input)
+        let result = try JSONC.normalize(input)
         XCTAssertFalse(result.contains("line comment"))
         XCTAssertFalse(result.contains("block"))
         XCTAssertTrue(result.contains("\"a\": 1,"))
         XCTAssertTrue(result.contains("\"b\": 2"))
     }
 
-    func testHandlesEscapedQuotesInStrings() {
+    func testHandlesEscapedQuotesInStrings() throws {
         let input = #"{"msg": "he said \"// hello\"", "key": 1}"#
-        let result = JSONC.stripComments(input)
+        let result = try JSONC.normalize(input)
         XCTAssertEqual(result, input, "Escaped quotes should not break string tracking")
     }
 
-    func testEmptyInput() {
-        XCTAssertEqual(JSONC.stripComments(""), "")
+    func testEmptyInput() throws {
+        XCTAssertEqual(try JSONC.normalize(""), "")
     }
 
-    func testCommentOnly() {
-        XCTAssertEqual(JSONC.stripComments("// just a comment").trimmingCharacters(in: .whitespaces), "")
+    func testCommentOnly() throws {
+        XCTAssertEqual(try JSONC.normalize("// just a comment").trimmingCharacters(in: .whitespaces), "")
     }
 
     // MARK: - JSONC Decoding
@@ -122,5 +122,45 @@ final class JSONCTests: XCTestCase {
         let config = try JSONC.decode(CommandConfig.self, from: jsonc.data(using: .utf8)!)
         XCTAssertEqual(config.sections.count, 1)
         XCTAssertEqual(config.sections[0].items[0].label, "/commit")
+    }
+
+    // MARK: - normalize (comments + trailing commas)
+
+    func testNormalizeRemovesTrailingCommaInArray() throws {
+        XCTAssertEqual(try JSONC.normalize("[1, 2,]"), "[1, 2]")
+    }
+
+    func testNormalizeRemovesTrailingCommaInObjectAcrossCommentAndNewline() throws {
+        XCTAssertEqual(try JSONC.normalize("{\"a\": 1, // last\n}"), "{\"a\": 1 \n}")
+    }
+
+    func testNormalizeKeepsSeparatorCommas() throws {
+        XCTAssertEqual(try JSONC.normalize("[1, /* c */ 2]"), "[1,  2]")
+    }
+
+    func testNormalizeKeepsCommasInsideStrings() throws {
+        XCTAssertEqual(try JSONC.normalize("[\"a,]\", \"b,}\"]"), "[\"a,]\", \"b,}\"]")
+    }
+
+    func testNormalizeStripsComments() throws {
+        XCTAssertEqual(try JSONC.normalize("{ /* a */ \"k\": 1 } // b"), "{  \"k\": 1 } ")
+    }
+
+    func testNormalizeRejectsUnterminatedBlockComment() {
+        XCTAssertThrowsError(try JSONC.normalize("{\n\n  /* never closed\n\"k\": 1 }")) { error in
+            XCTAssertEqual(error as? JSONC.ParseError, .unterminatedComment(line: 3))
+        }
+    }
+
+    func testDecodeAcceptsTrailingCommas() throws {
+        let jsonc = """
+        {
+            "sections": [
+                { "name": "A", "items": [{ "label": "x", "text": "x", },], },
+            ],
+        }
+        """
+        let config = try JSONC.decode(CommandConfig.self, from: Data(jsonc.utf8))
+        XCTAssertEqual(config.sections.first?.items.first?.label, "x")
     }
 }

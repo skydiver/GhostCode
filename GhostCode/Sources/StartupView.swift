@@ -185,7 +185,7 @@ private struct ProjectInfoSection: View {
             InfoRow(icon: "folder", text: displayPath)
             InfoRow(icon: "arrow.triangle.branch", text: gitText)
             if showSessionInfo {
-                InfoRow(icon: "text.bubble", text: sessionText(sessionInfo))
+                InfoRow(icon: "text.bubble", text: sessionInfo.summary(relativeTo: Date()))
             } else {
                 InfoRow(icon: "text.bubble", text: " ")
                     .opacity(0)
@@ -215,14 +215,6 @@ private struct ProjectInfoSection: View {
         return "\(git.branch) · \(git.displayText)"
     }
 
-    private func sessionText(_ info: SessionInfoProvider.SessionInfo) -> String {
-        guard info.count > 0 else { return "No previous sessions" }
-        let sessionWord = info.count == 1 ? "session" : "sessions"
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        let relative = formatter.localizedString(for: info.lastDate!, relativeTo: Date())
-        return "\(info.count) \(sessionWord) · last \(relative)"
-    }
 }
 
 private struct InfoRow: View {
@@ -251,6 +243,17 @@ enum SessionInfoProvider {
     struct SessionInfo {
         let count: Int
         let lastDate: Date?
+
+        /// e.g. "3 sessions · last 2 hours ago". The date is omitted when no
+        /// session file could be stat'ed (files rotated between listing and stat).
+        func summary(relativeTo now: Date) -> String {
+            guard count > 0 else { return "No previous sessions" }
+            let sessions = "\(count) \(count == 1 ? "session" : "sessions")"
+            guard let lastDate else { return sessions }
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .full
+            return "\(sessions) · last \(formatter.localizedString(for: lastDate, relativeTo: now))"
+        }
     }
 
     static func info(for projectPath: String) async -> SessionInfo {
@@ -277,7 +280,7 @@ enum SessionInfoProvider {
                     let fullPath = "\(sessionsDir)/\(file)"
                     if let attrs = try? fm.attributesOfItem(atPath: fullPath),
                        let modified = attrs[.modificationDate] as? Date {
-                        if latestDate == nil || modified > latestDate! {
+                        if latestDate.map({ modified > $0 }) ?? true {
                             latestDate = modified
                         }
                     }

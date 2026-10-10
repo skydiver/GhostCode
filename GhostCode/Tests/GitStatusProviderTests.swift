@@ -2,62 +2,85 @@ import XCTest
 @testable import Ghostty
 
 final class GitStatusProviderTests: XCTestCase {
+    // `git status --porcelain=v2 --branch` output.
+
     func testParseBranchName() {
-        let output = "## main...origin/main"
-        let status = GitStatusProvider.parseGitStatus(
-            statusOutput: output,
-            aheadBehind: ""
-        )
+        let output = "# branch.oid 1f2e3d4c5b6a\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
         XCTAssertEqual(status?.branch, "main")
     }
 
     func testParseCleanRepo() {
-        let output = "## feat/sidebar...origin/feat/sidebar"
-        let status = GitStatusProvider.parseGitStatus(
-            statusOutput: output,
-            aheadBehind: ""
-        )
+        let output = "# branch.oid 1f2e3d4c5b6a\n# branch.head feat/sidebar\n# branch.upstream origin/feat/sidebar\n# branch.ab +0 -0\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
         XCTAssertEqual(status?.branch, "feat/sidebar")
         XCTAssertFalse(status?.isDirty ?? true)
         XCTAssertEqual(status?.changedFileCount, 0)
     }
 
     func testParseDirtyRepo() {
-        let output = "## main\n M Sources/file1.swift\nM  Sources/file2.swift\n?? newfile.swift"
-        let status = GitStatusProvider.parseGitStatus(
-            statusOutput: output,
-            aheadBehind: ""
-        )
+        let output = """
+        # branch.oid 1f2e3d4c5b6a
+        # branch.head main
+        1 .M N... 100644 100644 100644 aaaa aaaa Sources/file1.swift
+        1 M. N... 100644 100644 100644 bbbb cccc Sources/file2.swift
+        2 R. N... 100644 100644 100644 dddd dddd R100 new.swift	old.swift
+        u UU N... 100644 100644 100644 100644 eeee ffff 0000 conflicted.swift
+        ? newfile.swift
+
+        """
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
         XCTAssertEqual(status?.branch, "main")
         XCTAssertTrue(status?.isDirty ?? false)
-        XCTAssertEqual(status?.changedFileCount, 3)
+        XCTAssertEqual(status?.changedFileCount, 5)
     }
 
     func testParseAheadBehind() {
-        let output = "## main...origin/main [ahead 2, behind 1]"
-        let status = GitStatusProvider.parseGitStatus(
-            statusOutput: output,
-            aheadBehind: "2\t1\n"
-        )
+        let output = "# branch.oid 1f2e3d4c5b6a\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -1\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
         XCTAssertEqual(status?.ahead, 2)
         XCTAssertEqual(status?.behind, 1)
     }
 
+    func testParseWithoutUpstreamHasNoAheadBehind() {
+        let output = "# branch.oid 1f2e3d4c5b6a\n# branch.head main\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
+        XCTAssertEqual(status?.ahead, 0)
+        XCTAssertEqual(status?.behind, 0)
+    }
+
     func testParseDottedBranchName() {
-        let output = "## release/1.0...origin/release/1.0"
-        let status = GitStatusProvider.parseGitStatus(
-            statusOutput: output,
-            aheadBehind: ""
-        )
+        let output = "# branch.oid 1f2e3d4c5b6a\n# branch.head release/1.0\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
         XCTAssertEqual(status?.branch, "release/1.0")
     }
 
+    func testParseRepoWithoutCommits() {
+        let output = "# branch.oid (initial)\n# branch.head main\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
+        XCTAssertEqual(status?.branch, "main")
+    }
+
+    func testParseDetachedHeadShowsShortCommit() {
+        let output = "# branch.oid 0123456789abcdef0123456789abcdef01234567\n# branch.head (detached)\n"
+        let status = GitStatusProvider.parseGitStatus(statusOutput: output)
+        XCTAssertEqual(status?.branch, "0123456")
+    }
+
     func testParseNonGitDirectory() {
-        let status = GitStatusProvider.parseGitStatus(
-            statusOutput: "",
-            aheadBehind: ""
-        )
-        XCTAssertNil(status)
+        XCTAssertNil(GitStatusProvider.parseGitStatus(statusOutput: ""))
+    }
+
+    func testFetchStatusReadsBranchOfNewRepository() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gitstatus-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        try git(["init", "-q", "-b", "trunk"], in: root)
+
+        let status = await GitStatusProvider.fetchStatus(for: root.path)
+
+        XCTAssertEqual(status?.branch, "trunk")
     }
 
     // MARK: - runGit hardening

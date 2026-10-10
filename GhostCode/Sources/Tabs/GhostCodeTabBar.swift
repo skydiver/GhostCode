@@ -114,26 +114,31 @@ struct GhostCodeTabBar: View {
 }
 
 /// Observes a tab's surface title via Combine and provides a live display title.
-private class TabTitleProvider: ObservableObject {
-    @Published var displayTitle: String
+final class TabTitleProvider: ObservableObject {
+    @Published private(set) var displayTitle: String
     private var cancellable: AnyCancellable?
 
-    init(tab: TabItem) {
-        let fallback = tab.title
+    /// - Parameter titles: live terminal titles; nil keeps the initial title.
+    init(initialTitle: String, fallback: String, titles: AnyPublisher<String, Never>?) {
+        displayTitle = initialTitle.isEmpty ? fallback : initialTitle
+        // A weak sink: `assign(to:on: self)` would retain self through its own cancellable.
+        cancellable = titles?
+            .map { $0.isEmpty ? fallback : $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] title in
+                self?.displayTitle = title
+            }
+    }
 
-        // AI tabs always show the binary's formal name (e.g. "Claude Code").
-        // Shell tabs show the live terminal title.
-        if tab.kind == .ai {
-            displayTitle = fallback
-        } else if let surface = tab.controller.focusedSurface {
-            displayTitle = surface.title.isEmpty ? fallback : surface.title
-            cancellable = surface.$title
-                .map { $0.isEmpty ? fallback : $0 }
-                .receive(on: DispatchQueue.main)
-                .assign(to: \.displayTitle, on: self)
-        } else {
-            displayTitle = fallback
-        }
+    /// AI tabs always show the binary's formal name (e.g. "Claude Code").
+    /// Shell tabs show the live terminal title.
+    convenience init(tab: TabItem) {
+        let surface = tab.kind == .ai ? nil : tab.controller.focusedSurface
+        self.init(
+            initialTitle: surface?.title ?? tab.title,
+            fallback: tab.title,
+            titles: surface?.$title.eraseToAnyPublisher()
+        )
     }
 }
 

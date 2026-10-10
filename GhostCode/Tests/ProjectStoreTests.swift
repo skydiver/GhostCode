@@ -283,4 +283,29 @@ final class ProjectStoreTests: XCTestCase {
 
         XCTAssertNil(ProjectStore(filePath: tempFile.path).loadError)
     }
+
+    // MARK: - Runtime state preservation
+
+    func testReplaceProjectsKeepsCurrentRuntimeState() {
+        store.addProject(path: "/tmp/project-a")
+        let snapshot = store.projects  // taken when edit mode starts
+        store.setActive("/tmp/project-a", active: true)
+        let status = Project.GitStatus(branch: "main", isDirty: true, changedFileCount: 1, ahead: 0, behind: 0, remoteURL: nil)
+        store.updateGitStatus(path: "/tmp/project-a", status: status)
+
+        store.replaceProjects(snapshot)
+
+        XCTAssertEqual(store.projects[0].state, .activeBackground)
+        XCTAssertEqual(store.projects[0].gitStatus, status)
+    }
+
+    func testSetNameKeepsAttention() {
+        store.addProject(path: "/tmp/project-a")
+        store.setAttention("/tmp/project-a", hasAttention: true)
+
+        store.setName("/tmp/project-a", name: "Renamed")
+
+        XCTAssertTrue(store.projects[0].hasAttention)
+        XCTAssertEqual(store.projects[0].name, "Renamed")
+    }
 }

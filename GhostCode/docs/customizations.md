@@ -64,7 +64,7 @@ Each item must have **exactly one** of `text` or `executable`:
 | `text`       | Pastes the text into the active terminal. Presses Enter if `autoSend: true`.                                    |
 | `executable` | Spawns the binary as a new process. Argv defaults to `[<project_path>]`; override with `arguments` (see below). |
 
-An item with both fields, or with neither, fails to load — and the entire config file errors out, leaving the palette empty.
+An item with both fields, or with neither, fails to load. The whole file is then rejected: the palette keeps the last valid commands and shows the error at the top.
 
 `executable` paths must be **absolute** (start with `/`). Relative paths are rejected.
 
@@ -242,16 +242,16 @@ The clamping is intentional — chip and list layouts have their own visual rhyt
 
 - The file is watched by the app — saves trigger an immediate reload.
 - Atomic saves (delete + rename, used by most editors) are handled — the watcher reattaches.
-- If the new file has any validation error, the palette goes empty until the file becomes valid again. The previous valid state is **not** preserved across a bad save.
+- If the new file has any error, the palette keeps the last valid commands and shows the error at the top until the file becomes valid again. If the file is invalid when GhostCode starts, the palette is empty apart from the error.
 
 ### Common validation errors
 
-| Error                                    | Cause                                                                             |
-| ---------------------------------------- | --------------------------------------------------------------------------------- |
-| Item has both `text` and `executable`    | Use exactly one                                                                   |
-| Item has neither `text` nor `executable` | Use exactly one                                                                   |
-| `executable` doesn't start with `/`      | Provide an absolute path                                                          |
-| `arguments` set without `executable`     | `arguments` only applies to executable items                                      |
-| Malformed JSONC                          | The parser allows comments but no trailing commas; check for missing/extra braces |
+| Error                                    | Cause                                                                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Item has both `text` and `executable`    | Use exactly one                                                                                             |
+| Item has neither `text` nor `executable` | Use exactly one                                                                                             |
+| `executable` doesn't start with `/`      | Provide an absolute path                                                                                    |
+| `arguments` set without `executable`     | `arguments` only applies to executable items                                                                |
+| Malformed JSONC                          | The parser allows comments and trailing commas; check for missing/extra braces, quotes, or an unclosed `/*` |
 
 For deeper diagnostics, open Console.app and filter on the subsystem `com.flydev.ghostcode`.

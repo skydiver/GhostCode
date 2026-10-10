@@ -10,6 +10,9 @@ struct GhostCodeCommandPaletteView: View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
+                    if let loadError = store.loadError {
+                        CommandConfigErrorView(message: loadError)
+                    }
                     ForEach(store.sections) { section in
                         CommandSectionView(
                             section: section,
@@ -35,7 +38,6 @@ struct GhostCodeCommandPaletteView: View {
                 .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            .paletteEnabled(state.canSendText)
         }
         .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
@@ -44,6 +46,31 @@ struct GhostCodeCommandPaletteView: View {
                 .fill(Color(nsColor: .separatorColor))
                 .frame(width: 1)
         }
+    }
+}
+
+/// Shown above the palette while the commands file has an error.
+private struct CommandConfigErrorView: View {
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Commands file has an error", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Showing the last valid commands.")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(.rect(cornerRadius: 6))
     }
 }
 

@@ -8,64 +8,65 @@ final class GitStatusProvider {
 
     /// Fetches git status for a project path asynchronously.
     static func fetchStatus(for path: String) async -> Project.GitStatus? {
-        async let statusResult = runGit(["status", "--porcelain", "--branch"], in: path)
-        async let aheadBehindResult = runGit(
-            ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
-            in: path
-        )
+        async let statusResult = runGit(["status", "--porcelain=v2", "--branch"], in: path)
         async let remoteResult = runGit(["remote", "get-url", "origin"], in: path)
 
         let statusOutput = await statusResult
-        let aheadBehind = await aheadBehindResult
         let remote = await remoteResult
 
         return parseGitStatus(
             statusOutput: statusOutput,
-            aheadBehind: aheadBehind,
             remoteURL: remote.isEmpty ? nil : remote
         )
     }
 
-    /// Parses the combined output of git status and rev-list into a GitStatus.
-    static func parseGitStatus(statusOutput: String, aheadBehind: String, remoteURL: String? = nil) -> Project.GitStatus? {
-        let lines = statusOutput.components(separatedBy: "\n").filter { !$0.isEmpty }
-        guard let branchLine = lines.first, branchLine.hasPrefix("##") else {
-            return nil
-        }
-
-        // Parse branch name: "## main...origin/main" or "## main"
-        let branchPart = branchLine.dropFirst(3)  // Remove "## "
-        let branch: String
-        if let dotRange = branchPart.range(of: "...") {
-            branch = String(branchPart[..<dotRange.lowerBound])
-        } else {
-            branch = String(branchPart.prefix(while: { $0 != " " }))
-        }
-
-        // Count changed files (all lines except the branch line)
-        let changedFiles = lines.dropFirst().count
-        let isDirty = changedFiles > 0
-
-        // Parse ahead/behind from rev-list output
+    /// Parses `git status --porcelain=v2 --branch` output into a GitStatus.
+    ///
+    /// Header lines start with `#` (`# branch.head main`, `# branch.ab +2 -1`);
+    /// every other line is one changed, unmerged or untracked path.
+    static func parseGitStatus(statusOutput: String, remoteURL: String? = nil) -> Project.GitStatus? {
+        var head: String?
+        var oid: String?
         var ahead = 0
         var behind = 0
-        let abLines = aheadBehind.components(separatedBy: "\n").filter { !$0.isEmpty }
-        if let abLine = abLines.first {
-            let parts = abLine.split(separator: "\t")
-            if parts.count == 2 {
-                ahead = Int(parts[0]) ?? 0
-                behind = Int(parts[1]) ?? 0
+        var changedFiles = 0
+
+        for line in statusOutput.split(separator: "\n") {
+            if let value = headerValue(line, key: "branch.head") {
+                head = value
+            } else if let value = headerValue(line, key: "branch.oid") {
+                oid = value
+            } else if let value = headerValue(line, key: "branch.ab") {
+                // "+<ahead> -<behind>"
+                let counts = value.split(separator: " ").map { Int($0.dropFirst()) ?? 0 }
+                if counts.count == 2 {
+                    ahead = counts[0]
+                    behind = counts[1]
+                }
+            } else if !line.hasPrefix("#") {
+                changedFiles += 1
             }
+        }
+
+        guard var branch = head else { return nil }
+        if branch == "(detached)", let oid {
+            branch = String(oid.prefix(7))
         }
 
         return Project.GitStatus(
             branch: branch,
-            isDirty: isDirty,
+            isDirty: changedFiles > 0,
             changedFileCount: changedFiles,
             ahead: ahead,
             behind: behind,
             remoteURL: remoteURL
         )
+    }
+
+    private static func headerValue(_ line: Substring, key: String) -> String? {
+        let prefix = "# \(key) "
+        guard line.hasPrefix(prefix) else { return nil }
+        return String(line.dropFirst(prefix.count))
     }
 
     /// Builds the git invocation for a project directory. Repository config is
