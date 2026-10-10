@@ -133,6 +133,18 @@ After a sync — or after pulling one someone else made — rebuild the core bef
 make core && make test ADHOC=1
 ```
 
+## Releases and Updates
+
+Releases are built by the GitHub **Release** workflow (Actions → Release → Run workflow, enter the version). It builds a universal app signed with Developer ID, notarizes and staples it, and publishes `GhostCode-<version>-universal.zip` plus a signed `appcast.xml` on the GitHub release.
+
+Installed copies check `https://github.com/skydiver/GhostCode/releases/latest/download/appcast.xml` once a day and ask before installing. Only workflow builds can update: local builds (`make build`, `make release`, `make release-silicon`) leave updates off, and "Check for Updates…" is disabled in them.
+
+- **Signing key:** the Sparkle EdDSA private key is the `SPARKLE_ED_PRIVATE_KEY` repository secret (also in the password manager). Its public key is `SUPublicEDKey` in `Ghostty/macos/Ghostty-Info.plist`. The workflow fails if they don't match.
+- **Testing an update feed:** run a release copy with `GHOSTCODE_UPDATE_ENDPOINT=https://…/appcast.xml` to point it at a test appcast.
+- **Pulling a bad release:** mark the previous release as Latest on GitHub; new checks stop offering the bad one.
+- **Script tests:** `GhostCode/scripts/tests/test-make-appcast.sh` and `test-verify-ed-signature.sh`.
+- **If only the appcast upload fails:** the release exists but has no `appcast.xml`, so installed copies see no update (safe). Re-attach it from the workflow run's output with `gh release upload v<version> appcast.xml --clobber -R skydiver/GhostCode`; re-running the workflow would fail at `gh release create`, because the release already exists.
+
 ## Troubleshooting
 
 | Problem                                                            | Fix                                                                                                                      |

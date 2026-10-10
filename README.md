@@ -40,6 +40,8 @@ Download the latest universal binary from the [Releases](https://github.com/skyd
 
 **The app is signed and notarized by Apple** — you can run it immediately without Gatekeeper warnings.
 
+GhostCode updates itself: from version 0.15.0, installed copies check for new releases daily and ask before installing. Versions before 0.15.0 need to be updated by hand once.
+
 1. Download `GhostCode-<version>-universal.zip`
 2. Unzip and drag `GhostCode.app` to your Applications folder
 3. Launch GhostCode
