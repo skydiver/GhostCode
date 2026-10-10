@@ -21,27 +21,32 @@ endif
 
 XCODEBUILD = xcodebuild -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(DERIVED) $(SIGN_FLAGS)
 
+# `make release-silicon`: Apple Silicon only, with debug symbols stripped as
+# `xcodebuild archive` does for the GitHub release.
+SILICON_FLAGS = ARCHS=arm64 ONLY_ACTIVE_ARCH=NO DEPLOYMENT_POSTPROCESSING=YES STRIP_INSTALLED_PRODUCT=YES
+
 # Upstream Ghostty commit or ref that `make sync` moves Ghostty/ to.
 UPSTREAM ?= upstream/main
 
 .DEFAULT_GOAL := help
 
-.PHONY: help core build run launch stop test test-core release sync config clean clean-core
+.PHONY: help core build run launch stop test test-core release release-silicon sync config clean clean-core
 
 help: ## Show this help
 	@echo "GhostCode — make targets:"
-	@echo "  make core        Build the Ghostty core and GhosttyKit.xcframework (Zig)"
-	@echo "  make build       Build the app ($(CONFIG)); builds the core first if missing"
-	@echo "  make run         Quit the running app, build, then relaunch"
-	@echo "  make launch      Relaunch the built app (no build)"
-	@echo "  make stop        Quit the running app"
-	@echo "  make test        Run the Xcode unit tests (UI tests skipped)"
-	@echo "  make test-core   Run the Zig core tests (TEST_FILTER=name to narrow)"
-	@echo "  make release     Build the core (ReleaseFast) and the app (Release)"
-	@echo "  make sync        Sync Ghostty/ to upstream as one commit (UPSTREAM=$(UPSTREAM))"
-	@echo "  make config      Open the GhostCode config file"
-	@echo "  make clean       Remove app build artifacts"
-	@echo "  make clean-core  Remove Zig build artifacts and the xcframework"
+	@echo "  make core             Build the Ghostty core and GhosttyKit.xcframework (Zig)"
+	@echo "  make build            Build the app ($(CONFIG)); builds the core first if missing"
+	@echo "  make run              Quit the running app, build, then relaunch"
+	@echo "  make launch           Relaunch the built app (no build)"
+	@echo "  make stop             Quit the running app"
+	@echo "  make test             Run the Xcode unit tests (UI tests skipped)"
+	@echo "  make test-core        Run the Zig core tests (TEST_FILTER=name to narrow)"
+	@echo "  make release          Build the core (ReleaseFast) and the app (Release, universal)"
+	@echo "  make release-silicon  Stripped Release build, Apple Silicon only"
+	@echo "  make sync             Sync Ghostty/ to upstream as one commit (UPSTREAM=$(UPSTREAM))"
+	@echo "  make config           Open the GhostCode config file"
+	@echo "  make clean            Remove app build artifacts"
+	@echo "  make clean-core       Remove Zig build artifacts and the xcframework"
 	@echo ""
 	@echo "Options: ADHOC=1 (ad-hoc signing), CONFIG=Release, ZIG=/path/to/zig"
 
@@ -70,11 +75,17 @@ test: | $(XCFRAMEWORK) ## Run the Xcode unit tests (UI tests skipped)
 test-core: ## Run the Zig core tests
 	cd $(CORE_DIR) && $(ZIG) build test $(if $(TEST_FILTER),-Dtest-filter=$(TEST_FILTER))
 
-release: ## Build the core (ReleaseFast) and the app (Release)
+release: ## Build the core (ReleaseFast) and the app (Release, universal)
 	cd $(CORE_DIR) && $(ZIG) build -Demit-macos-app=false -Doptimize=ReleaseFast
 	$(XCODEBUILD) -configuration Release build
 	@echo "\n✅ Release build complete:"
-	@ls -d "$(DERIVED)/Build/Products/Release/GhostCode.app"
+	@du -sh "$(DERIVED)/Build/Products/Release/GhostCode.app"
+
+release-silicon: ## Build a stripped, Apple Silicon-only Release app
+	cd $(CORE_DIR) && $(ZIG) build -Demit-macos-app=false -Doptimize=ReleaseFast -Dxcframework-target=native
+	$(XCODEBUILD) -configuration Release $(SILICON_FLAGS) build
+	@echo "\n✅ Apple Silicon release build complete:"
+	@du -sh "$(DERIVED)/Build/Products/Release/GhostCode.app"
 
 sync: ## Sync Ghostty/ to upstream as one commit
 	git fetch upstream

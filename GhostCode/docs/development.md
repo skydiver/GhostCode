@@ -39,14 +39,15 @@ This builds the Ghostty core, builds the app, and launches it. The first build c
 
 The app is built to `build/Build/Products/Debug/GhostCode.app`.
 
-| Command                | What it does                                                    |
-| ---------------------- | --------------------------------------------------------------- |
-| `make build ADHOC=1`   | Build the app (Debug). Builds the Ghostty core first if missing |
-| `make run ADHOC=1`     | Quit the running app, build, then relaunch                      |
-| `make launch`          | Relaunch the last build without rebuilding                      |
-| `make stop`            | Quit the running app                                            |
-| `make core`            | Rebuild the Ghostty core and `GhosttyKit.xcframework`           |
-| `make release ADHOC=1` | Release build of the core (ReleaseFast) and the app             |
+| Command                        | What it does                                                    |
+| ------------------------------ | --------------------------------------------------------------- |
+| `make build ADHOC=1`           | Build the app (Debug). Builds the Ghostty core first if missing |
+| `make run ADHOC=1`             | Quit the running app, build, then relaunch                      |
+| `make launch`                  | Relaunch the last build without rebuilding                      |
+| `make stop`                    | Quit the running app                                            |
+| `make core`                    | Rebuild the Ghostty core and `GhosttyKit.xcframework`           |
+| `make release ADHOC=1`         | Release build of the core (ReleaseFast) and the app (universal) |
+| `make release-silicon ADHOC=1` | Smaller, stripped Release build for Apple Silicon only          |
 
 Run `make` with no arguments for the full list.
 

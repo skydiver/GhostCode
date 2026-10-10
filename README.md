@@ -137,18 +137,19 @@ See Ghostty's [HACKING.md](Ghostty/HACKING.md) for more on the Zig toolchain.
 
 Run `make` with no arguments to list every target.
 
-| Command           | What it does                                                         |
-| ----------------- | -------------------------------------------------------------------- |
-| `make build`      | Build the app (Debug). Builds the Ghostty core first if it's missing |
-| `make run`        | Quit the running app, build, then relaunch                           |
-| `make test`       | Run the Xcode unit tests (UI tests skipped)                          |
-| `make test-core`  | Run the Ghostty core (Zig) tests. `TEST_FILTER=name` narrows them    |
-| `make core`       | Rebuild the Ghostty core and `GhosttyKit.xcframework`                |
-| `make release`    | Build the core (ReleaseFast) and the app (Release)                   |
-| `make sync`       | Sync `Ghostty/` with upstream (see below)                            |
-| `make config`     | Open `~/.config/ghostcode/config`                                    |
-| `make clean`      | Remove app build output (`build/`)                                   |
-| `make clean-core` | Remove Zig build output and the xcframework                          |
+| Command                | What it does                                                         |
+| ---------------------- | -------------------------------------------------------------------- |
+| `make build`           | Build the app (Debug). Builds the Ghostty core first if it's missing |
+| `make run`             | Quit the running app, build, then relaunch                           |
+| `make test`            | Run the Xcode unit tests (UI tests skipped)                          |
+| `make test-core`       | Run the Ghostty core (Zig) tests. `TEST_FILTER=name` narrows them    |
+| `make core`            | Rebuild the Ghostty core and `GhosttyKit.xcframework`                |
+| `make release`         | Build the core (ReleaseFast) and the app (Release, universal)        |
+| `make release-silicon` | Stripped Release build for Apple Silicon only                        |
+| `make sync`            | Sync `Ghostty/` with upstream (see below)                            |
+| `make config`          | Open `~/.config/ghostcode/config`                                    |
+| `make clean`           | Remove app build output (`build/`)                                   |
+| `make clean-core`      | Remove Zig build output and the xcframework                          |
 
 The app is built to `build/Build/Products/Debug/GhostCode.app`. Builds use the project's signing settings; add `ADHOC=1` to sign ad hoc (no Apple team needed), e.g. `make run ADHOC=1`.
 
