@@ -13,6 +13,7 @@ struct GhostCodeCommandPaletteView: View {
                     ForEach(store.sections) { section in
                         CommandSectionView(
                             section: section,
+                            state: state,
                             onItemAction: onItemAction
                         )
                     }
@@ -34,6 +35,7 @@ struct GhostCodeCommandPaletteView: View {
                 .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
+            .paletteEnabled(state.canSendText)
         }
         .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
@@ -42,18 +44,24 @@ struct GhostCodeCommandPaletteView: View {
                 .fill(Color(nsColor: .separatorColor))
                 .frame(width: 1)
         }
-        .opacity(state.isLocked ? 0.4 : 1.0)
-        .allowsHitTesting(!state.isLocked)
-        .disabled(state.isLocked)
     }
 }
 
 /// A single section of command buttons.
 struct CommandSectionView: View {
     let section: CommandSection
+    @ObservedObject var state: CommandPaletteState
     let onItemAction: (CommandItem.Action) -> Void
 
     @State private var isCollapsed = false
+
+    private func isEnabled(_ item: CommandItem) -> Bool {
+        item.action?.isEnabled(canSendText: state.canSendText, canLaunch: state.canLaunch) ?? false
+    }
+
+    private var isSectionEnabled: Bool {
+        section.items.contains { isEnabled($0) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -81,6 +89,8 @@ struct CommandSectionView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // The header is usable only when at least one of its items is.
+            .paletteEnabled(isSectionEnabled)
 
             if !isCollapsed {
                 Group {
@@ -91,6 +101,7 @@ struct CommandSectionView: View {
                                 CommandButton(item: item) {
                                     if let action = item.action { onItemAction(action) }
                                 }
+                                .paletteEnabled(isEnabled(item))
                             }
                         }
                     case .list:
@@ -99,6 +110,7 @@ struct CommandSectionView: View {
                                 CommandButton(item: item, fullWidth: true) {
                                     if let action = item.action { onItemAction(action) }
                                 }
+                                .paletteEnabled(isEnabled(item))
                             }
                         }
                     case .tiles:
@@ -111,6 +123,7 @@ struct CommandSectionView: View {
                                 CommandTile(item: item) {
                                     if let action = item.action { onItemAction(action) }
                                 }
+                                .paletteEnabled(isEnabled(item))
                             }
                         }
                     }
@@ -318,5 +331,17 @@ struct FlowLayout: Layout {
         }
 
         return (CGSize(width: maxWidth, height: totalHeight), positions, widths)
+    }
+}
+
+
+private extension View {
+    /// Locks a palette element: dimmed, disabled, and ignoring the mouse so
+    /// hover effects and tooltips don't appear while it's unavailable.
+    func paletteEnabled(_ enabled: Bool) -> some View {
+        self
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.4)
+            .allowsHitTesting(enabled)
     }
 }

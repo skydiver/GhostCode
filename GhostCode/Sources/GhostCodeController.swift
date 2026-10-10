@@ -5,7 +5,8 @@ import Combine
 
 /// Shared state between GhostCodeController and GhostCodeCommandPaletteView.
 final class CommandPaletteState: ObservableObject {
-    @Published var isLocked: Bool = true
+    @Published var canSendText = false
+    @Published var canLaunch = false
 }
 
 /// The main GhostCode window controller. Manages a three-panel layout:
@@ -31,6 +32,8 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     // The project path whose terminals are currently displayed in the center pane
     private var activeProjectPath: String?
+    /// Project whose landing page is showing (no terminals yet).
+    private var landingProjectPath: String?
 
     // Maps project paths to their tab groups
     private var projectTabs: [String: ProjectTabGroup] = [:]
@@ -160,7 +163,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                     case .sendText(let text, let sendEnter):
                         self.sendTextToActiveTerminal(text, sendEnter: sendEnter)
                     case .launchProcess(let executablePath, let arguments):
-                        guard let projectPath = self.activeProjectPath else { return }
+                        guard let projectPath = self.activeProjectPath ?? self.landingProjectPath else { return }
                         ExecutableLauncher.launch(
                             executablePath: executablePath,
                             projectPath: projectPath,
@@ -364,6 +367,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
         ])
         activeProjectPath = nil
+        landingProjectPath = nil
         projectStore.setSelected(nil)
         updateRightSidebarLock()
     }
@@ -402,6 +406,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             hostingView.trailingAnchor.constraint(equalTo: centerContainer.trailingAnchor),
         ])
         activeProjectPath = nil
+        landingProjectPath = project.path
         projectStore.setSelected(project.path)
         updateRightSidebarLock()
     }
@@ -513,6 +518,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         guard let tabGroup = projectTabs[project.path], !tabGroup.isEmpty else { return }
 
         activeProjectPath = project.path
+        landingProjectPath = nil
         projectStore.setVisible(project.path)
         updateRightSidebarLock()
 
@@ -947,7 +953,8 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // MARK: - Right Sidebar Lock
 
     private func updateRightSidebarLock() {
-        commandPaletteState.isLocked = !hasActiveTerminal
+        commandPaletteState.canSendText = hasActiveTerminal
+        commandPaletteState.canLaunch = (activeProjectPath ?? landingProjectPath) != nil
     }
 
     // MARK: - Window Delegate

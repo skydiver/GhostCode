@@ -86,4 +86,22 @@ final class CommandActionTests: XCTestCase {
             XCTFail("Expected .launchProcess action, got \(String(describing: item.action))")
         }
     }
+
+    // MARK: - isEnabled
+
+    func testSendTextEnabledOnlyWithCanSendText() {
+        let action = CommandItem.Action.sendText("hi", autoSend: false)
+        XCTAssertTrue(action.isEnabled(canSendText: true, canLaunch: false))
+        XCTAssertTrue(action.isEnabled(canSendText: true, canLaunch: true))
+        XCTAssertFalse(action.isEnabled(canSendText: false, canLaunch: true))
+        XCTAssertFalse(action.isEnabled(canSendText: false, canLaunch: false))
+    }
+
+    func testLaunchProcessEnabledOnlyWithCanLaunch() {
+        let action = CommandItem.Action.launchProcess(executablePath: "/usr/bin/true", arguments: nil)
+        XCTAssertTrue(action.isEnabled(canSendText: false, canLaunch: true))
+        XCTAssertTrue(action.isEnabled(canSendText: true, canLaunch: true))
+        XCTAssertFalse(action.isEnabled(canSendText: true, canLaunch: false))
+        XCTAssertFalse(action.isEnabled(canSendText: false, canLaunch: false))
+    }
 }

@@ -27,6 +27,14 @@ struct CommandItem: Codable, Identifiable {
     enum Action {
         case sendText(String, autoSend: Bool)
         case launchProcess(executablePath: String, arguments: [String]?)
+
+        /// Whether this action can run given the current palette capabilities.
+        func isEnabled(canSendText: Bool, canLaunch: Bool) -> Bool {
+            switch self {
+            case .sendText: return canSendText
+            case .launchProcess: return canLaunch
+            }
+        }
     }
 
     var action: Action? {
