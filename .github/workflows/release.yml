@@ -46,8 +46,8 @@ jobs:
       # ── Zig ────────────────────────────────────────────────
       - name: Install Zig
         run: |
-          curl -L https://ziglang.org/download/0.15.2/zig-aarch64-macos-0.15.2.tar.xz | tar xJ
-          echo "$PWD/zig-aarch64-macos-0.15.2" >> $GITHUB_PATH
+          curl -L https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz | tar xJ
+          echo "$PWD/zig-aarch64-macos-0.16.0" >> $GITHUB_PATH
 
       - name: Build XCFramework
         working-directory: Ghostty
