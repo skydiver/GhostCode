@@ -51,15 +51,31 @@ struct StartupView: View {
     }
 }
 
+/// An entry in the landing page picker: an AI binary, or a plain shell.
+private enum LandingChoice: Hashable {
+    case binary(SupportedBinary)
+    case shell
+
+    var binary: SupportedBinary? {
+        guard case .binary(let binary) = self else { return nil }
+        return binary
+    }
+
+    var supportsSessionInfo: Bool {
+        binary?.supportsSessionInfo ?? false
+    }
+}
+
 /// Landing page shown when a project is selected but no session is running.
 struct ProjectLandingView: View {
     let project: Project
     let globalDefaultBinary: SupportedBinary
     let onStartSession: () -> Void
     let onResumeSession: () -> Void
+    let onOpenShell: () -> Void
     let onBinaryChanged: (SupportedBinary) -> Void
 
-    @State private var selectedBinary: SupportedBinary
+    @State private var selectedChoice: LandingChoice
     @State private var sessionInfo = SessionInfoProvider.SessionInfo(count: 0, lastDate: nil)
 
     init(
@@ -67,14 +83,16 @@ struct ProjectLandingView: View {
         globalDefaultBinary: SupportedBinary,
         onStartSession: @escaping () -> Void,
         onResumeSession: @escaping () -> Void,
+        onOpenShell: @escaping () -> Void,
         onBinaryChanged: @escaping (SupportedBinary) -> Void
     ) {
         self.project = project
         self.globalDefaultBinary = globalDefaultBinary
         self.onStartSession = onStartSession
         self.onResumeSession = onResumeSession
+        self.onOpenShell = onOpenShell
         self.onBinaryChanged = onBinaryChanged
-        self._selectedBinary = State(initialValue: project.binary ?? globalDefaultBinary)
+        self._selectedChoice = State(initialValue: .binary(project.binary ?? globalDefaultBinary))
     }
 
     var body: some View {
@@ -89,41 +107,52 @@ struct ProjectLandingView: View {
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(.primary.opacity(0.8))
 
-            Picker(selection: $selectedBinary) {
+            Picker(selection: $selectedChoice) {
                 ForEach(SupportedBinary.allCases) { binary in
-                    Text(binary.displayName).tag(binary)
+                    Text(binary.displayName).tag(LandingChoice.binary(binary))
                 }
+                Text("Shell").tag(LandingChoice.shell)
             } label: {
                 EmptyView()
             }
             .pickerStyle(.segmented)
             .controlSize(.large)
             .frame(width: 420)
-            .onChange(of: selectedBinary) { newValue in
-                onBinaryChanged(newValue)
+            .onChange(of: selectedChoice) { newValue in
+                guard let binary = newValue.binary else { return }
+                onBinaryChanged(binary)
             }
 
             VStack(spacing: 16) {
                 ProjectInfoSection(
                     project: project,
                     sessionInfo: sessionInfo,
-                    showSessionInfo: selectedBinary.supportsSessionInfo
+                    showSessionInfo: selectedChoice.supportsSessionInfo
                 )
 
                 HStack(spacing: 10) {
-                    LandingButton(
-                        title: "New Session",
-                        icon: "play.fill",
-                        style: .primary,
-                        action: onStartSession
-                    )
-
-                    if selectedBinary.resumeArg != nil && sessionInfo.count > 0 {
+                    if let binary = selectedChoice.binary {
                         LandingButton(
-                            title: "Resume Last Session",
-                            icon: "arrow.counterclockwise",
-                            style: .secondary,
-                            action: onResumeSession
+                            title: "New Session",
+                            icon: "play.fill",
+                            style: .primary,
+                            action: onStartSession
+                        )
+
+                        if binary.resumeArg != nil && sessionInfo.count > 0 {
+                            LandingButton(
+                                title: "Resume Last Session",
+                                icon: "arrow.counterclockwise",
+                                style: .secondary,
+                                action: onResumeSession
+                            )
+                        }
+                    } else {
+                        LandingButton(
+                            title: "Open Shell",
+                            icon: "terminal",
+                            style: .primary,
+                            action: onOpenShell
                         )
                     }
                 }
@@ -134,8 +163,8 @@ struct ProjectLandingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .task(id: selectedBinary) {
-            if selectedBinary.supportsSessionInfo {
+        .task(id: selectedChoice) {
+            if selectedChoice.supportsSessionInfo {
                 sessionInfo = await SessionInfoProvider.info(for: project.path)
             } else {
                 sessionInfo = SessionInfoProvider.SessionInfo(count: 0, lastDate: nil)

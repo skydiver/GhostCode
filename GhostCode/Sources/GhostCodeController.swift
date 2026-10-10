@@ -382,6 +382,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             onResumeSession: { [weak self] in
                 self?.spawnTerminal(for: project, resume: true)
             },
+            onOpenShell: { [weak self] in
+                self?.spawnShell(for: project)
+            },
             onBinaryChanged: { [weak self] binary in
                 self?.projectStore.setBinary(project.path, binary: binary)
             }
@@ -448,15 +451,18 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         }
         config.command = "\(shell) -l -c 'exec \(command)'"
 
-        let controller = TerminalController(ghostty, withBaseConfig: config)
+        let tab = makeTab(config: config, kind: .ai, title: binary.displayName)
+        startProject(project, with: tab)
+    }
 
-        // Set focused surface manually since windowDidLoad won't run
-        // (we embed TerminalView directly, bypassing the nib-based window).
-        if case .leaf(let view) = controller.surfaceTree.root {
-            controller.focusedSurface = view
-        }
+    private func spawnShell(for project: Project) {
+        let tab = makeShellTab(projectPath: project.path)
+        startProject(project, with: tab)
+    }
 
-        let tab = TabItem(controller: controller, kind: .ai, title: binary.displayName)
+    /// Creates the project's tab group around its first tab, starts attention
+    /// tracking and shows the terminals.
+    private func startProject(_ project: Project, with tab: TabItem) {
         let tabGroup = ProjectTabGroup()
         tabGroup.addTab(tab)
         projectTabs[project.path] = tabGroup
@@ -477,6 +483,27 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         projectStore.setActive(project.path, active: true)
         showProjectTerminals(for: project)
         observeTabExit(tab, projectPath: project.path)
+    }
+
+    /// Builds a terminal tab from a surface configuration.
+    private func makeTab(config: Ghostty.SurfaceConfiguration, kind: TabKind, title: String) -> TabItem {
+        let controller = TerminalController(ghostty, withBaseConfig: config)
+
+        // Set focused surface manually since windowDidLoad won't run
+        // (we embed TerminalView directly, bypassing the nib-based window).
+        if case .leaf(let view) = controller.surfaceTree.root {
+            controller.focusedSurface = view
+        }
+
+        return TabItem(controller: controller, kind: kind, title: title)
+    }
+
+    /// Builds a plain login-shell tab in the project folder (no `command`).
+    private func makeShellTab(projectPath: String) -> TabItem {
+        var config = Ghostty.SurfaceConfiguration()
+        config.workingDirectory = projectPath
+        config.hushLogin = true
+        return makeTab(config: config, kind: .shell, title: "shell")
     }
 
     private func showProjectTerminals(for project: Project) {
@@ -586,17 +613,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     private func createShellTab(projectPath: String) {
         guard let tabGroup = projectTabs[projectPath] else { return }
 
-        var config = Ghostty.SurfaceConfiguration()
-        config.workingDirectory = projectPath
-        config.hushLogin = true
-
-        let controller = TerminalController(ghostty, withBaseConfig: config)
-
-        if case .leaf(let view) = controller.surfaceTree.root {
-            controller.focusedSurface = view
-        }
-
-        let tab = TabItem(controller: controller, kind: .shell, title: "shell")
+        let tab = makeShellTab(projectPath: projectPath)
         tabGroup.addTab(tab)
         observeTabExit(tab, projectPath: projectPath)
 
