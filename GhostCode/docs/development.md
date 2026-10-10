@@ -144,6 +144,9 @@ Installed copies check `https://github.com/skydiver/GhostCode/releases/latest/do
 - **Pulling a bad release:** mark the previous release as Latest on GitHub; new checks stop offering the bad one.
 - **Script tests:** `GhostCode/scripts/tests/test-make-appcast.sh` and `test-verify-ed-signature.sh`.
 - **If publishing fails after the release was created** (for example the appcast upload): run the workflow again with the same version and **Create tag** unchecked. It rebuilds and re-signs, then replaces the zip and `appcast.xml` on the existing release. Until then installed copies simply see no update.
+- **Release approval:** the workflow runs in the `release` GitHub Environment, which holds the signing secrets and only runs from `GhostCode` or `v*` tags after you approve it (Actions → the run → Review deployments).
+- **Version rule:** the workflow accepts only `x.y.z`, and refuses a version lower than the current Latest release (an older version would otherwise be offered as an update, because Sparkle compares build numbers). Re-running the same version is allowed.
+- **Losing the signing key:** updates are verified before they're unpacked (`SUVerifyUpdateBeforeExtraction`), so if the EdDSA private key is ever lost, a new key can't be rolled out through an update: users would have to reinstall by hand. Keep the password-manager copy safe.
 
 ## Troubleshooting
 

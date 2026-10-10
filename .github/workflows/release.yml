@@ -17,6 +17,7 @@ jobs:
   release:
     name: Build, Sign, Notarize & Release
     runs-on: macos-26
+    environment: release
     permissions:
       contents: write
     env:
@@ -24,6 +25,38 @@ jobs:
       VERSION: ${{ inputs.version }}
 
     steps:
+      # ── Validate ───────────────────────────────────────────
+      - name: Validate version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must look like 1.2.3, got '$VERSION'"
+            exit 1
+          fi
+
+          # Refuse versions lower than the current Latest release: Sparkle
+          # compares build numbers (run numbers), so an older version published
+          # as Latest would be offered to everyone as an "update".
+          if OUT=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>&1); then
+            LATEST=${OUT#v}
+          elif [[ $OUT == *"Not Found"* ]]; then
+            LATEST=""
+          else
+            echo "Could not read the latest release: $OUT"
+            exit 1
+          fi
+
+          if [[ -n "$LATEST" && "$LATEST" != "$VERSION" ]]; then
+            LOWER=$(printf '%s\n%s\n' "$VERSION" "$LATEST" | sort -t. -k1,1n -k2,2n -k3,3n | sed -n 1p)
+            if [[ "$LOWER" == "$VERSION" ]]; then
+              echo "Version $VERSION is lower than the latest release $LATEST"
+              exit 1
+            fi
+          fi
+          echo "Version $VERSION OK (latest release: ${LATEST:-none})"
+
       # ── Tag ────────────────────────────────────────────────
       - name: Create tag
         if: inputs.create_tag
@@ -33,7 +66,7 @@ jobs:
             await github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: `refs/tags/v${{ inputs.version }}`,
+              ref: `refs/tags/v${process.env.VERSION}`,
               sha: context.sha,
             });
 
@@ -46,7 +79,11 @@ jobs:
       # ── Zig ────────────────────────────────────────────────
       - name: Install Zig
         run: |
-          curl -L https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz | tar xJ
+          set -euo pipefail
+          ZIG_SHA256=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
+          curl -fsSL -o "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz
+          echo "$ZIG_SHA256  $RUNNER_TEMP/zig.tar.xz" | shasum -a 256 -c -
+          tar xJf "$RUNNER_TEMP/zig.tar.xz"
           echo "$PWD/zig-aarch64-macos-0.16.0" >> $GITHUB_PATH
 
       - name: Build XCFramework
