@@ -76,6 +76,12 @@ jobs:
         with:
           ref: v${{ inputs.version }}
 
+      - name: Check release notes
+        run: |
+          set -euo pipefail
+          NOTES="GhostCode/release-notes/${VERSION}.md"
+          test -s "$NOTES" || { echo "Missing release notes: $NOTES (commit it before running the release)"; exit 1; }
+
       # ── Zig ────────────────────────────────────────────────
       - name: Install Zig
         run: |
@@ -203,8 +209,14 @@ jobs:
 
           BUILD=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$PLIST")
           MIN_OS=$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$PLIST")
-          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" > "$RUNNER_TEMP/appcast.xml"
-          xmllint --noout "$RUNNER_TEMP/appcast.xml"
+          APPCAST="$RUNNER_TEMP/appcast.xml"
+          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" "GhostCode/release-notes/${VERSION}.md" > "$APPCAST"
+          xmllint --noout "$APPCAST"
+
+          # Sign the feed itself (the app sets SURequireSignedFeed), then verify it.
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$APPCAST"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --verify --ed-key-file - "$APPCAST"
+          xmllint --noout "$APPCAST"
 
       - name: Create GitHub Release
         env:
@@ -215,10 +227,11 @@ jobs:
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             # Re-run for an existing release: replace the zip, then the appcast.
             gh release upload "v${VERSION}" "$ZIP" --clobber
+            gh release edit "v${VERSION}" --notes-file "GhostCode/release-notes/${VERSION}.md"
           else
             gh release create "v${VERSION}" "$ZIP" \
               --title "GhostCode v${VERSION}" \
-              --generate-notes \
+              --notes-file "GhostCode/release-notes/${VERSION}.md" \
               --latest
           fi
           # The appcast goes last, so the feed never points at a missing zip.

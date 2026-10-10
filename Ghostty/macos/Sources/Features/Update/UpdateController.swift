@@ -68,6 +68,10 @@ class UpdateController {
     ///
     /// This is typically connected to a menu item action.
     func checkForUpdates() {
+        // GhostCode: local builds have no feed; a check_for_updates keybind
+        // reaches here without menu validation.
+        guard isConfigured else { return }
+
         // If we're already idle, then just check for updates immediately.
         if viewModel.state == .idle {
             updater.checkForUpdates()

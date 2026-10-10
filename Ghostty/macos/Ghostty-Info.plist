@@ -112,6 +112,8 @@
 	<true/>
 	<key>SUPublicEDKey</key>
 	<string>P/jjnavgsMG/u9dDSNezba74l8aPB+v5KMraPSaNqIo=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>SUVerifyUpdateBeforeExtraction</key>
