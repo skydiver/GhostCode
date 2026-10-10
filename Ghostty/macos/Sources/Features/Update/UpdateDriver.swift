@@ -66,12 +66,18 @@ class UpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {
-        // We don't do anything with the release notes here because Ghostty
-        // doesn't use the release notes feature of Sparkle currently.
+        // GhostCode: forward release notes to Sparkle's standard dialog, which
+        // GhostCode uses because its window has no update pill.
+        if !hasUnobtrusiveTarget {
+            standard.showUpdateReleaseNotes(with: downloadData)
+        }
     }
 
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: any Error) {
-        // We don't do anything with release notes. See `showUpdateReleaseNotes`
+        // GhostCode: see showUpdateReleaseNotes.
+        if !hasUnobtrusiveTarget {
+            standard.showUpdateReleaseNotesFailedToDownloadWithError(error)
+        }
     }
 
     func showUpdateNotFoundWithError(_ error: any Error,

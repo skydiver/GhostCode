@@ -31,8 +31,8 @@ enum UpdateConfiguration: Equatable {
     }
 
     static func resolve(enabled: String?, publicKey: String?, override: String?) -> UpdateConfiguration {
-        guard enabled?.trimmingCharacters(in: .whitespaces) == "YES" else { return .unconfigured }
-        guard let publicKey, !publicKey.trimmingCharacters(in: .whitespaces).isEmpty else { return .unconfigured }
+        guard enabled?.trimmingCharacters(in: .whitespacesAndNewlines) == "YES" else { return .unconfigured }
+        guard let publicKey, !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .unconfigured }
 
         if let override, let url = httpsURL(override) {
             return .available(url)
@@ -42,7 +42,7 @@ enum UpdateConfiguration: Equatable {
     }
 
     private static func httpsURL(_ string: String) -> URL? {
-        guard let url = URL(string: string.trimmingCharacters(in: .whitespaces)),
+        guard let url = URL(string: string.trimmingCharacters(in: .whitespacesAndNewlines)),
               url.scheme == "https",
               let host = url.host, !host.isEmpty else { return nil }
         return url

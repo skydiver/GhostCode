@@ -173,11 +173,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${VERSION}" \
-            "$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip" \
-            --title "GhostCode v${VERSION}" \
-            --generate-notes \
-            --latest
+          set -euo pipefail
+          ZIP="$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            # Re-run for an existing release: replace the zip, then the appcast.
+            gh release upload "v${VERSION}" "$ZIP" --clobber
+          else
+            gh release create "v${VERSION}" "$ZIP" \
+              --title "GhostCode v${VERSION}" \
+              --generate-notes \
+              --latest
+          fi
+          # The appcast goes last, so the feed never points at a missing zip.
           gh release upload "v${VERSION}" "$RUNNER_TEMP/appcast.xml" --clobber
 
       # ── Cleanup ────────────────────────────────────────────

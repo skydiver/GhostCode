@@ -64,4 +64,13 @@ final class UpdateConfigurationTests: XCTestCase {
         XCTAssertEqual(UpdateConfiguration.available(feed).feedURL, feed)
         XCTAssertNil(UpdateConfiguration.unconfigured.feedURL)
     }
+
+    /// Plist or environment values may carry a trailing newline.
+    func testValuesWithNewlinesAreTrimmed() {
+        XCTAssertEqual(
+            UpdateConfiguration.resolve(enabled: "YES\n", publicKey: pubkey, override: "https://example.com/staging.xml\n"),
+            .available(URL(string: "https://example.com/staging.xml")!)
+        )
+        XCTAssertEqual(UpdateConfiguration.resolve(enabled: "YES", publicKey: "\n", override: nil), .unconfigured)
+    }
 }
