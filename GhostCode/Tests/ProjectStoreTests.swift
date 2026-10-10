@@ -247,4 +247,40 @@ final class ProjectStoreTests: XCTestCase {
         XCTAssertNil(migrated.projects[0].customName)
         XCTAssertEqual(migrated.projects[0].name, "project-a")
     }
+
+    // MARK: - Unreadable file
+
+    func testUnparseableFileIsNotOverwrittenBySave() throws {
+        // A missing closing bracket: a typical hand-edit mistake.
+        let original = """
+        [{"path": "/tmp/project-a"}
+        """
+        try original.data(using: .utf8)!.write(to: tempFile)
+
+        let broken = ProjectStore(filePath: tempFile.path)
+        broken.addProject(path: "/tmp/project-b")
+        broken.setName("/tmp/project-b", name: "B")
+        broken.removeProject(path: "/tmp/project-b")
+
+        XCTAssertEqual(try String(contentsOf: tempFile, encoding: .utf8), original)
+    }
+
+    func testUnparseableFileReportsLoadError() throws {
+        try "not json".data(using: .utf8)!.write(to: tempFile)
+
+        let broken = ProjectStore(filePath: tempFile.path)
+
+        XCTAssertNotNil(broken.loadError)
+        XCTAssertTrue(broken.projects.isEmpty)
+    }
+
+    func testMissingFileHasNoLoadError() {
+        XCTAssertNil(store.loadError)
+    }
+
+    func testValidFileHasNoLoadError() throws {
+        try #"[{"path": "/tmp/project-a"}]"#.data(using: .utf8)!.write(to: tempFile)
+
+        XCTAssertNil(ProjectStore(filePath: tempFile.path).loadError)
+    }
 }

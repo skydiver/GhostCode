@@ -81,6 +81,16 @@ final class GhostCodeConfigTests: XCTestCase {
         XCTAssertEqual(path?.hasPrefix("/"), true)
     }
 
+    func testResolveCommandGivesUpOnHangingLoginShell() async throws {
+        let hangingShell = try makeExecutable(named: "hanging-shell", script: "#!/bin/sh\nexec /bin/sleep 30\n")
+        let start = Date()
+
+        let path = await GhostCodeConfig.resolveCommand("ls", shell: hangingShell.path, timeout: 0.5)
+
+        XCTAssertNil(path)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5)
+    }
+
     func testValidatedExecutablePathAcceptsSingleLineAbsoluteExecutable() throws {
         let executable = try makeExecutable(named: "tool")
         XCTAssertEqual(

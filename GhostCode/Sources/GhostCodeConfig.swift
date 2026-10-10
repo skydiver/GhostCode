@@ -130,34 +130,23 @@ enum GhostCodeConfig {
 
     /// Resolves a command name to its absolute path using the user's login shell.
     /// Returns nil unless the shell reports a single absolute path to an executable file.
-    static func resolveCommand(_ name: String) async -> String? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: shell)
-                process.arguments = ["-l", "-c", "command -v \(name)"]
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = FileHandle.nullDevice
-                do {
-                    try process.run()
-                } catch {
-                    logger.warning("Failed to resolve command '\(name)': \(error)")
-                    continuation.resume(returning: nil)
-                    return
-                }
-                // Drain before waiting: the shell blocks once the pipe buffer is full.
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                guard let path = validatedExecutablePath(fromShellOutput: String(data: data, encoding: .utf8) ?? "") else {
-                    logger.warning("Command '\(name)' did not resolve to an executable path")
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: path)
-            }
+    static func resolveCommand(
+        _ name: String,
+        shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh",
+        timeout: TimeInterval = 5
+    ) async -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-l", "-c", "command -v \(name)"]
+        guard let data = await ProcessRunner.output(of: process, timeout: timeout) else {
+            logger.warning("Resolving command '\(name)' failed or timed out after \(timeout) s")
+            return nil
         }
+        guard let path = validatedExecutablePath(fromShellOutput: String(data: data, encoding: .utf8) ?? "") else {
+            logger.warning("Command '\(name)' did not resolve to an executable path")
+            return nil
+        }
+        return path
     }
 
     /// Accepts `command -v` output only when it is one absolute path to an

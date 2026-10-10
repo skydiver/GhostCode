@@ -47,6 +47,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // Coalesces rapid focus transfers (e.g. pressing Cmd+T quickly)
     private var pendingFocusWork: DispatchWorkItem?
 
+    // Projects whose first AI session is still resolving its binary
+    private var pendingAISpawns: Set<String> = []
+
     // The currently active terminal controller, resolved through the tab group
     var activeTerminalController: TerminalController? {
         guard let path = activeProjectPath else { return nil }
@@ -105,14 +108,26 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
                 }
             }
 
+        if let loadError = projectStore.loadError {
+            // Deferred so the sheet attaches once the window is on screen.
+            DispatchQueue.main.async { [weak self] in
+                self?.presentProjectsLoadFailure(loadError)
+            }
+        }
+
         removalCancellable = projectStore.$lastRemovedPaths
             .filter { !$0.isEmpty }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] paths in
                 guard let self else { return }
-                for path in paths where self.projectTabs[path] != nil {
-                    // cleanupTabGroup also calls attentionTracker.stopTracking.
-                    self.cleanupTabGroup(for: path)
+                for path in paths {
+                    if self.projectTabs[path] != nil {
+                        // cleanupTabGroup also calls attentionTracker.stopTracking.
+                        self.cleanupTabGroup(for: path)
+                    }
+                    if self.activeProjectPath == path || self.landingProjectPath == path {
+                        self.showStartupScreen()
+                    }
                 }
             }
     }
@@ -190,6 +205,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            // Local monitors see every window's keys: leave Settings, About, update
+            // dialogs and our own sheets alone.
+            guard event.window === self.window, self.window?.attachedSheet == nil else { return event }
 
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
@@ -438,20 +456,33 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     }
 
     private func spawnTerminal(for project: Project, resume: Bool = false) {
+        // Ignore repeated clicks while the first launch is still resolving the binary.
+        guard pendingAISpawns.insert(project.path).inserted else { return }
         Task {
-            await spawnTerminalAsync(for: project, resume: resume)
+            await spawnAITab(projectPath: project.path, resume: resume)
+            pendingAISpawns.remove(project.path)
         }
     }
 
-    private func spawnTerminalAsync(for project: Project, resume: Bool) async {
-        let currentProject = projectStore.project(forPath: project.path) ?? project
-        let binary = currentProject.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
+    private func spawnShell(for project: Project) {
+        let tab = makeShellTab(projectPath: project.path)
+        addTab(tab, to: project)
+    }
+
+    /// Resolves the project's AI binary and adds a tab running it. State is re-read
+    /// after the await: the project may have been removed, or its tab group created
+    /// or closed, while the login shell was resolving the command.
+    private func spawnAITab(projectPath: String, resume: Bool) async {
+        guard let project = projectStore.project(forPath: projectPath) else { return }
+        let binary = project.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
         guard let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName) else {
             presentCommandNotFound(binary)
             return
         }
+        guard let currentProject = projectStore.project(forPath: projectPath) else { return }
+
         var config = Ghostty.SurfaceConfiguration()
-        config.workingDirectory = project.path
+        config.workingDirectory = projectPath
         config.hushLogin = true
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         var arguments: [String] = []
@@ -465,12 +496,18 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         )
 
         let tab = makeTab(config: config, kind: .ai, title: binary.displayName)
-        startProject(project, with: tab)
+        addTab(tab, to: currentProject)
     }
 
-    private func spawnShell(for project: Project) {
-        let tab = makeShellTab(projectPath: project.path)
-        startProject(project, with: tab)
+    /// Adds a tab to the project's group, starting the group if there is none yet.
+    private func addTab(_ tab: TabItem, to project: Project) {
+        guard let tabGroup = projectTabs[project.path] else {
+            startProject(project, with: tab)
+            return
+        }
+        tabGroup.addTab(tab)
+        observeTabExit(tab, projectPath: project.path)
+        showProjectTerminals(for: project)
     }
 
     /// Creates the project's tab group around its first tab, starts attention
@@ -532,6 +569,11 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         // container has valid bounds from the previous layout pass.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // Another view may have replaced this one since (e.g. the last tab closed).
+            guard self.activeProjectPath == project.path,
+                  self.projectTabs[project.path] === tabGroup,
+                  !tabGroup.isEmpty
+            else { return }
 
             let container = ProjectTerminalContainer(
                 tabGroup: tabGroup,
@@ -642,36 +684,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     }
 
     private func createAITab(projectPath: String) {
-        guard let tabGroup = projectTabs[projectPath] else { return }
-        guard let project = projectStore.project(forPath: projectPath) else { return }
-
-        let binary = project.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
-
+        guard projectTabs[projectPath] != nil else { return }
         Task {
-            guard let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName) else {
-                presentCommandNotFound(binary)
-                return
-            }
-            var config = Ghostty.SurfaceConfiguration()
-            config.workingDirectory = projectPath
-            config.hushLogin = true
-            let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-            config.command = GhostCodeConfig.loginShellCommand(
-                shell: shell,
-                executable: resolvedPath,
-                arguments: []
-            )
-
-            let controller = TerminalController(ghostty, withBaseConfig: config)
-
-            if case .leaf(let view) = controller.surfaceTree.root {
-                controller.focusedSurface = view
-            }
-
-            let tab = TabItem(controller: controller, kind: .ai, title: binary.displayName)
-            tabGroup.addTab(tab)
-            observeTabExit(tab, projectPath: projectPath)
-            showProjectTerminals(for: project)
+            await spawnAITab(projectPath: projectPath, resume: false)
         }
     }
 
@@ -681,27 +696,40 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
         let tab = tabGroup.tabs[index]
 
-        // If the tab has a running process, confirm before closing
-        if tab.controller.surfaceTree.contains(where: { $0.needsConfirmQuit }) {
-            confirmCloseTab(at: index, projectPath: projectPath)
+        guard hasRunningProcess(tab) else {
+            closeTabImmediately(at: index, projectPath: projectPath)
             return
         }
 
-        closeTabImmediately(at: index, projectPath: projectPath)
+        // Tabs can move or close while the sheet is up, so find the tab again by id.
+        let tabId = tab.id
+        confirmClose(
+            title: "Close Terminal?",
+            message: "The terminal still has a running process. If you close the terminal the process will be killed."
+        ) { [weak self] in
+            guard let self,
+                  let index = self.projectTabs[projectPath]?.tabs.firstIndex(where: { $0.id == tabId })
+            else { return }
+            self.closeTabImmediately(at: index, projectPath: projectPath)
+        }
     }
 
-    private func confirmCloseTab(at index: Int, projectPath: String) {
+    private func hasRunningProcess(_ tab: TabItem) -> Bool {
+        tab.controller.surfaceTree.contains(where: { $0.needsConfirmQuit })
+    }
+
+    private func confirmClose(title: String, message: String, onConfirm: @escaping () -> Void) {
         guard let window else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Close Terminal?"
-        alert.informativeText = "The terminal still has a running process. If you close the terminal the process will be killed."
+        alert.messageText = title
+        alert.informativeText = message
         alert.addButton(withTitle: "Close")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
-        alert.beginSheetModal(for: window) { [weak self] response in
+        alert.beginSheetModal(for: window) { response in
             if response == .alertFirstButtonReturn {
-                self?.closeTabImmediately(at: index, projectPath: projectPath)
+                onConfirm()
             }
         }
     }
@@ -730,8 +758,27 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         guard let tabGroup = projectTabs[projectPath] else { return }
         guard keepIndex >= 0, keepIndex < tabGroup.tabs.count else { return }
 
-        let keepTab = tabGroup.tabs[keepIndex]
-        for tab in tabGroup.tabs where tab.id != keepTab.id {
+        let keepId = tabGroup.tabs[keepIndex].id
+        let others = tabGroup.tabs.filter { $0.id != keepId }
+        guard others.contains(where: hasRunningProcess) else {
+            closeOtherTabsImmediately(keeping: keepId, projectPath: projectPath)
+            return
+        }
+
+        confirmClose(
+            title: "Close Other Terminals?",
+            message: "Some of the other terminals still have running processes. If you close them the processes will be killed."
+        ) { [weak self] in
+            self?.closeOtherTabsImmediately(keeping: keepId, projectPath: projectPath)
+        }
+    }
+
+    private func closeOtherTabsImmediately(keeping keepId: UUID, projectPath: String) {
+        guard let tabGroup = projectTabs[projectPath],
+              let keepTab = tabGroup.tabs.first(where: { $0.id == keepId })
+        else { return }
+
+        for tab in tabGroup.tabs where tab.id != keepId {
             exitCancellables.removeValue(forKey: tab.id)
         }
 
@@ -923,6 +970,16 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    private func presentProjectsLoadFailure(_ error: Error) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Could not read the project list"
+        alert.informativeText = "\(GhostCodeConfig.projectsFilePath)\n\n\(error.localizedDescription)\n\nProject changes will not be saved until the file is fixed and GhostCode is restarted."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window)
     }
 
     private func presentCommandNotFound(_ binary: SupportedBinary) {

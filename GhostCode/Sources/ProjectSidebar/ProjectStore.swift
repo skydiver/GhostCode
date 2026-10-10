@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+import os
+
+private let logger = Logger(subsystem: "com.flydev.ghostcode", category: "projects")
 
 /// On-disk representation of a project entry with optional binary preference.
 private struct ProjectEntry: Codable {
@@ -13,6 +16,9 @@ final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published private(set) var selectedPath: String?
     @Published private(set) var lastRemovedPaths: [String] = []
+    /// Set when the projects file exists but could not be read. Saving is then
+    /// disabled, so the user's file is never replaced by a partial list.
+    private(set) var loadError: Error?
 
     private let filePath: String
     private var activationHistory: [String] = []
@@ -176,25 +182,33 @@ final class ProjectStore: ObservableObject {
     // MARK: - Persistence
 
     private func loadFromDisk() {
-        guard FileManager.default.fileExists(atPath: filePath),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: filePath))
-        else { return }
+        guard FileManager.default.fileExists(atPath: filePath) else { return }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            projects = try Self.decodeProjects(from: data)
+        } catch {
+            loadError = error
+            logger.error("Could not read \(self.filePath, privacy: .public); project changes will not be saved: \(error)")
+        }
+    }
 
-        // Try new format: [ProjectEntry]
-        if let entries = try? JSONC.decode([ProjectEntry].self, from: data) {
-            projects = entries.map {
+    private static func decodeProjects(from data: Data) throws -> [Project] {
+        do {
+            return try JSONC.decode([ProjectEntry].self, from: data).map {
                 Project(path: $0.path, customName: $0.name, binary: $0.binary)
             }
-            return
-        }
-
-        // Fall back to legacy format: [String]
-        if let paths = try? JSONC.decode([String].self, from: data) {
-            projects = paths.map { Project(path: $0) }
+        } catch {
+            // Legacy format: [String]. Report the current format's error if both fail.
+            guard let paths = try? JSONC.decode([String].self, from: data) else { throw error }
+            return paths.map { Project(path: $0) }
         }
     }
 
     private func saveToDisk() {
+        guard loadError == nil else {
+            logger.error("Not saving \(self.filePath, privacy: .public): it could not be read at launch")
+            return
+        }
         let entries = projects.map { project in
             ProjectEntry(
                 path: project.path,
@@ -202,7 +216,11 @@ final class ProjectStore: ObservableObject {
                 binary: project.binary
             )
         }
-        guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(entries)
+            try data.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        } catch {
+            logger.error("Could not save \(self.filePath, privacy: .public): \(error)")
+        }
     }
 }

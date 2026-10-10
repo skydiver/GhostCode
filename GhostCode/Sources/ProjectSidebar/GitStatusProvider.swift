@@ -3,6 +3,8 @@ import Foundation
 /// Provides git status for project directories by running git commands.
 final class GitStatusProvider {
     static let refreshInterval: TimeInterval = 30
+    /// A git call that takes longer (e.g. a hung network mount) is terminated.
+    private static let gitTimeout: TimeInterval = 10
 
     /// Fetches git status for a project path asynchronously.
     static func fetchStatus(for path: String) async -> Project.GitStatus? {
@@ -79,25 +81,10 @@ final class GitStatusProvider {
         return process
     }
 
-    /// Runs a git command in the given directory and returns stdout.
+    /// Runs a git command in the given directory and returns stdout, or "" on failure.
     private static func runGit(_ args: [String], in directory: String) async -> String {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let process = makeGitProcess(args, in: directory)
-                let stdout = Pipe()
-                process.standardOutput = stdout
-                process.standardError = FileHandle.nullDevice
-
-                do {
-                    try process.run()
-                    // Drain before waiting: git blocks once the pipe buffer is full.
-                    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-                } catch {
-                    continuation.resume(returning: "")
-                }
-            }
-        }
+        let process = makeGitProcess(args, in: directory)
+        guard let data = await ProcessRunner.output(of: process, timeout: gitTimeout) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 }

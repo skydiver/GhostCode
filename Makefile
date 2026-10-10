@@ -66,8 +66,10 @@ launch: stop ## Relaunch the built app without rebuilding
 	@sleep 0.4
 	open "$(APP)"
 
+# Match only this checkout's build, never an installed /Applications/GhostCode.app.
+# The [G] keeps the pattern from matching the shell that runs pkill.
 stop: ## Quit the running app
-	-@pkill -f GhostCode.app 2>/dev/null || true
+	-@pkill -f "$(abspath $(APP))/Contents/MacOS/[G]hostCode" 2>/dev/null || true
 
 test: | $(XCFRAMEWORK) ## Run the Xcode unit tests (UI tests skipped)
 	$(XCODEBUILD) -configuration Debug -skip-testing GhosttyUITests test
