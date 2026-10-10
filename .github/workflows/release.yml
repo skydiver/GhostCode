@@ -98,6 +98,8 @@ jobs:
             -scheme Ghostty \
             -configuration Release \
             -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+            GHOSTCODE_UPDATES_ENABLED=YES \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGN_STYLE=Manual \
@@ -114,7 +116,7 @@ jobs:
       # ── Notarize ───────────────────────────────────────────
       - name: Create ZIP for notarization
         run: |
-          ditto -c -k --keepParent \
+          ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent \
             "$RUNNER_TEMP/export/GhostCode.app" \
             "$RUNNER_TEMP/GhostCode-notarize.zip"
 
@@ -135,9 +137,37 @@ jobs:
       # ── Package & Release ──────────────────────────────────
       - name: Create release ZIP
         run: |
-          ditto -c -k --keepParent \
+          ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent \
             "$RUNNER_TEMP/export/GhostCode.app" \
             "$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
+
+      # ── Sparkle ────────────────────────────────────────────
+      - name: Verify release ZIP
+        run: GhostCode/scripts/verify-zip.sh "$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
+
+      - name: Sign update and write appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SPARKLE_ED_PRIVATE_KEY" || { echo "SPARKLE_ED_PRIVATE_KEY secret is missing"; exit 1; }
+          ZIP="$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
+          PLIST="$RUNNER_TEMP/export/GhostCode.app/Contents/Info.plist"
+          SIGN_UPDATE="$RUNNER_TEMP/spm/artifacts/sparkle/Sparkle/bin/sign_update"
+          test -x "$SIGN_UPDATE" || { echo "sign_update not found at $SIGN_UPDATE"; exit 1; }
+
+          ATTRS=$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$ZIP")
+          SIG=$(printf '%s' "$ATTRS" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          PUB=$(/usr/libexec/PlistBuddy -c 'Print SUPublicEDKey' "$PLIST")
+          swift GhostCode/scripts/verify-ed-signature.swift "$ZIP" "$SIG" "$PUB"
+
+          ENABLED=$(/usr/libexec/PlistBuddy -c 'Print GhostCodeUpdatesEnabled' "$PLIST")
+          test "$ENABLED" = "YES" || { echo "GhostCodeUpdatesEnabled is '$ENABLED', expected YES"; exit 1; }
+
+          BUILD=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$PLIST")
+          MIN_OS=$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$PLIST")
+          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" > "$RUNNER_TEMP/appcast.xml"
+          xmllint --noout "$RUNNER_TEMP/appcast.xml"
 
       - name: Create GitHub Release
         env:
@@ -148,6 +178,7 @@ jobs:
             --title "GhostCode v${VERSION}" \
             --generate-notes \
             --latest
+          gh release upload "v${VERSION}" "$RUNNER_TEMP/appcast.xml" --clobber
 
       # ── Cleanup ────────────────────────────────────────────
       - name: Cleanup keychain
