@@ -12,6 +12,9 @@ class UpdateController {
     private(set) var updater: SPUUpdater
     private let userDriver: UpdateDriver
 
+    /// Whether this build has a feed and a public key (release builds only).
+    let isConfigured: Bool
+
     var viewModel: UpdateViewModel {
         userDriver.viewModel
     }
@@ -23,6 +26,9 @@ class UpdateController {
 
     /// Initialize a new update controller.
     init() {
+        // GhostCode: only release builds from the GitHub workflow may update.
+        self.isConfigured = UpdateConfiguration.current().feedURL != nil
+
         let hostBundle = Bundle.main
         self.userDriver = UpdateDriver(
             viewModel: .init(),
@@ -40,6 +46,8 @@ class UpdateController {
     /// This must be called before the updater can check for updates. If starting fails,
     /// the error will be shown to the user.
     func startUpdater() {
+        guard isConfigured else { return }
+
         do {
             try updater.start()
         } catch {

@@ -1376,6 +1376,9 @@ extension AppDelegate: NSMenuItemValidation {
             }
             return undoManager.canRedo
 
+        case #selector(checkForUpdates(_:)):
+            return updateController.isConfigured
+
         default:
             return true
         }
