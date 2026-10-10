@@ -87,6 +87,12 @@
                                     <action selector="showAbout:" target="-1" id="tGt-68-tLn"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Check for Updates..." id="GEA-5y-yzH">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="checkForUpdates:" target="bbz-4X-AYv" id="z2n-lC-48f"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="VOq-y0-SEH"/>
                             <menuItem title="Preferences…" keyEquivalent="," id="BOF-NM-1cW">
                                 <connections>
