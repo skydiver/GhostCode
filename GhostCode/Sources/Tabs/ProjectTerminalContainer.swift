@@ -3,9 +3,11 @@ import SwiftUI
 struct ProjectTerminalContainer: View {
     @ObservedObject var tabGroup: ProjectTabGroup
     @ObservedObject var attentionTracker: ProjectAttentionTracker
+    @ObservedObject var fullCanvasState: FullCanvasState
     let ghostty: Ghostty.App
     var onNewShellTab: () -> Void
     var onNewAITab: () -> Void
+    var onToggleFullCanvas: () -> Void
     var onCloseTab: (Int) -> Void
     var onSelectTab: (Int) -> Void
     var onCloseOtherTabs: (Int) -> Void
@@ -14,9 +16,11 @@ struct ProjectTerminalContainer: View {
         VStack(spacing: 0) {
             GhostCodeTabBar(
                 tabGroup: tabGroup,
+                fullCanvasState: fullCanvasState,
                 attentionTabs: attentionTracker.attentionTabs,
                 onNewShellTab: onNewShellTab,
                 onNewAITab: onNewAITab,
+                onToggleFullCanvas: onToggleFullCanvas,
                 onCloseTab: onCloseTab,
                 onSelectTab: onSelectTab,
                 onCloseOtherTabs: onCloseOtherTabs

@@ -3,9 +3,11 @@ import Combine
 
 struct GhostCodeTabBar: View {
     @ObservedObject var tabGroup: ProjectTabGroup
+    @ObservedObject var fullCanvasState: FullCanvasState
     var attentionTabs: Set<UUID>
     var onNewShellTab: () -> Void
     var onNewAITab: () -> Void
+    var onToggleFullCanvas: () -> Void
     var onCloseTab: (Int) -> Void
     var onSelectTab: (Int) -> Void
     var onCloseOtherTabs: (Int) -> Void
@@ -44,7 +46,15 @@ struct GhostCodeTabBar: View {
 
             TabBarButton(icon: "sparkles", size: 10, tooltip: "New AI tab", action: onNewAITab)
             TabBarButton(icon: "plus", size: 11, tooltip: "New shell tab", action: onNewShellTab)
-                .padding(.trailing, 6)
+            TabBarButton(
+                icon: fullCanvasState.isActive
+                    ? "arrow.down.right.and.arrow.up.left"
+                    : "arrow.up.left.and.arrow.down.right",
+                size: 10,
+                tooltip: fullCanvasState.isActive ? "Exit full canvas" : "Full canvas",
+                action: onToggleFullCanvas
+            )
+            .padding(.trailing, 6)
         }
         .frame(height: 30)
         .background(Color(nsColor: NSColor(white: 0.1, alpha: 1)))

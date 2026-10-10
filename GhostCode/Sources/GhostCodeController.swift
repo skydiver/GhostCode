@@ -23,6 +23,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     let projectStore = ProjectStore()
     let commandStore = CommandStore()
     let commandPaletteState = CommandPaletteState()
+    let fullCanvasState = FullCanvasState()
     let attentionTracker = ProjectAttentionTracker()
     let pulseClock = PulseClock()
     private var attentionBridgeCancellable: AnyCancellable?
@@ -350,6 +351,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // MARK: - Startup Screen
 
     private func showStartupScreen() {
+        exitFullCanvasAndRestore()
         centerContainer.subviews.forEach { $0.removeFromSuperview() }
 
         let hostingView = NSHostingView(rootView: StartupView())
@@ -369,6 +371,7 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // MARK: - Project Landing
 
     private func showProjectLanding(for project: Project) {
+        exitFullCanvasAndRestore()
         centerContainer.subviews.forEach { $0.removeFromSuperview() }
 
         let globalDefault = GhostCodeConfig.loadAppConfig().defaultBinary
@@ -522,12 +525,16 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             let container = ProjectTerminalContainer(
                 tabGroup: tabGroup,
                 attentionTracker: self.attentionTracker,
+                fullCanvasState: self.fullCanvasState,
                 ghostty: self.ghostty,
                 onNewShellTab: { [weak self] in
                     self?.createShellTab(projectPath: project.path)
                 },
                 onNewAITab: { [weak self] in
                     self?.createAITab(projectPath: project.path)
+                },
+                onToggleFullCanvas: { [weak self] in
+                    self?.toggleFullCanvas()
                 },
                 onCloseTab: { [weak self] index in
                     self?.closeTab(at: index, projectPath: project.path)
@@ -904,12 +911,37 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     /// Toggle the left sidebar visibility.
     @IBAction func toggleLeftSidebar(_ sender: Any?) {
+        fullCanvasState.cancel()
         leftSidebarItem.animator().isCollapsed.toggle()
     }
 
     /// Toggle the right sidebar visibility.
     @IBAction func toggleRightSidebar(_ sender: Any?) {
+        fullCanvasState.cancel()
         rightSidebarItem.animator().isCollapsed.toggle()
+    }
+
+    // MARK: - Full Canvas
+
+    /// Hide both sidebars, or restore the layout remembered when full canvas began.
+    private func toggleFullCanvas() {
+        if fullCanvasState.isActive {
+            exitFullCanvasAndRestore()
+            return
+        }
+        fullCanvasState.enter(
+            leftOpen: !leftSidebarItem.isCollapsed,
+            rightOpen: !rightSidebarItem.isCollapsed
+        )
+        leftSidebarItem.animator().isCollapsed = true
+        rightSidebarItem.animator().isCollapsed = true
+    }
+
+    /// Leave full canvas (if active) and re-open the sidebars that were open before.
+    private func exitFullCanvasAndRestore() {
+        guard let layout = fullCanvasState.exit() else { return }
+        leftSidebarItem.animator().isCollapsed = !layout.leftOpen
+        rightSidebarItem.animator().isCollapsed = !layout.rightOpen
     }
 
     // MARK: - Right Sidebar Lock
