@@ -129,8 +129,8 @@ enum GhostCodeConfig {
     }
 
     /// Resolves a command name to its absolute path using the user's login shell.
-    /// Falls back to the bare command name if resolution fails.
-    static func resolveCommand(_ name: String) async -> String {
+    /// Returns nil unless the shell reports a single absolute path to an executable file.
+    static func resolveCommand(_ name: String) async -> String? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
@@ -142,21 +142,44 @@ enum GhostCodeConfig {
                 process.standardError = FileHandle.nullDevice
                 do {
                     try process.run()
-                    process.waitUntilExit()
                 } catch {
                     logger.warning("Failed to resolve command '\(name)': \(error)")
-                    continuation.resume(returning: name)
+                    continuation.resume(returning: nil)
                     return
                 }
+                // Drain before waiting: the shell blocks once the pipe buffer is full.
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                guard let path = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                      !path.isEmpty else {
-                    continuation.resume(returning: name)
+                process.waitUntilExit()
+                guard let path = validatedExecutablePath(fromShellOutput: String(data: data, encoding: .utf8) ?? "") else {
+                    logger.warning("Command '\(name)' did not resolve to an executable path")
+                    continuation.resume(returning: nil)
                     return
                 }
                 continuation.resume(returning: path)
             }
         }
+    }
+
+    /// Accepts `command -v` output only when it is one absolute path to an
+    /// executable file. Aliases, functions and login-script output are rejected.
+    static func validatedExecutablePath(fromShellOutput output: String) -> String? {
+        var path = output
+        if path.hasSuffix("\n") { path.removeLast() }
+        guard path.hasPrefix("/"), !path.contains(where: \.isNewline) else { return nil }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue,
+              FileManager.default.isExecutableFile(atPath: path)
+        else { return nil }
+        return path
+    }
+
+    /// Builds a surface command that runs `executable` through the user's login shell.
+    /// Ghostty runs the result with `/bin/sh -c` and the login shell parses the inner
+    /// `exec` again, so each layer is quoted separately.
+    static func loginShellCommand(shell: String, executable: String, arguments: [String]) -> String {
+        let inner = "exec " + ([executable] + arguments).map(Ghostty.Shell.quote).joined(separator: " ")
+        return [shell, "-l", "-c", inner].map(Ghostty.Shell.quote).joined(separator: " ")
     }
 }

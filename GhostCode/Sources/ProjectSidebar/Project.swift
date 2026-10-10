@@ -39,25 +39,31 @@ struct Project: Identifiable, Equatable {
         }
 
         /// The HTTPS URL for viewing the repo on GitHub, or nil if not a GitHub remote.
+        /// The remote comes from repository config and is opened with NSWorkspace,
+        /// so only an https URL on github.com is returned.
         var gitHubURL: URL? {
-            guard let remote = remoteURL else { return nil }
-            let cleaned = remote.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let remote = remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
 
             // SSH: git@github.com:owner/repo.git
-            if cleaned.hasPrefix("git@github.com:") {
-                let path = cleaned
-                    .replacingOccurrences(of: "git@github.com:", with: "")
-                    .replacingOccurrences(of: ".git", with: "")
-                return URL(string: "https://github.com/\(path)")
-            }
+            let sshPrefix = "git@github.com:"
+            let candidate = remote.hasPrefix(sshPrefix)
+                ? "https://github.com/" + remote.dropFirst(sshPrefix.count)
+                : remote
 
-            // HTTPS: https://github.com/owner/repo.git
-            if cleaned.contains("github.com") {
-                let path = cleaned.replacingOccurrences(of: ".git", with: "")
-                return URL(string: path)
-            }
+            guard let components = URLComponents(string: candidate),
+                  components.scheme?.lowercased() == "https",
+                  let host = components.host?.lowercased(),
+                  host == "github.com" || host == "www.github.com"
+            else { return nil }
 
-            return nil
+            var path = components.path
+            if path.hasSuffix(".git") { path.removeLast(".git".count) }
+
+            var url = URLComponents()
+            url.scheme = "https"
+            url.host = host
+            url.path = path
+            return url.url
         }
     }
 

@@ -446,18 +446,23 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     private func spawnTerminalAsync(for project: Project, resume: Bool) async {
         let currentProject = projectStore.project(forPath: project.path) ?? project
         let binary = currentProject.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
-        let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName)
+        guard let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName) else {
+            presentCommandNotFound(binary)
+            return
+        }
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = project.path
         config.hushLogin = true
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let command: String
+        var arguments: [String] = []
         if resume, let resumeArg = binary.resumeArg {
-            command = "\(resolvedPath) \(resumeArg)"
-        } else {
-            command = resolvedPath
+            arguments.append(resumeArg)
         }
-        config.command = "\(shell) -l -c 'exec \(command)'"
+        config.command = GhostCodeConfig.loginShellCommand(
+            shell: shell,
+            executable: resolvedPath,
+            arguments: arguments
+        )
 
         let tab = makeTab(config: config, kind: .ai, title: binary.displayName)
         startProject(project, with: tab)
@@ -643,12 +648,19 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         let binary = project.binary ?? GhostCodeConfig.loadAppConfig().defaultBinary
 
         Task {
-            let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName)
+            guard let resolvedPath = await GhostCodeConfig.resolveCommand(binary.commandName) else {
+                presentCommandNotFound(binary)
+                return
+            }
             var config = Ghostty.SurfaceConfiguration()
             config.workingDirectory = projectPath
             config.hushLogin = true
             let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-            config.command = "\(shell) -l -c 'exec \(resolvedPath)'"
+            config.command = GhostCodeConfig.loginShellCommand(
+                shell: shell,
+                executable: resolvedPath,
+                arguments: []
+            )
 
             let controller = TerminalController(ghostty, withBaseConfig: config)
 
@@ -911,6 +923,13 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    private func presentCommandNotFound(_ binary: SupportedBinary) {
+        presentLaunchFailure(
+            executablePath: binary.commandName,
+            reason: "\(binary.displayName) was not found. `command -v \(binary.commandName)` in your login shell must print the absolute path of an executable file."
+        )
     }
 
     // MARK: - Sidebar Toggles

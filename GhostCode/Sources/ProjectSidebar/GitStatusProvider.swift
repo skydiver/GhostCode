@@ -66,21 +66,33 @@ final class GitStatusProvider {
         )
     }
 
+    /// Builds the git invocation for a project directory. Repository config is
+    /// untrusted: `core.fsmonitor` would run a repo-chosen command on every poll,
+    /// and optional locks would make polling contend for the user's `index.lock`.
+    static func makeGitProcess(_ args: [String], in directory: String) -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-c", "core.fsmonitor=false", "-C", directory] + args
+        var environment = ProcessInfo.processInfo.environment
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
+        process.environment = environment
+        return process
+    }
+
     /// Runs a git command in the given directory and returns stdout.
     private static func runGit(_ args: [String], in directory: String) async -> String {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-                process.arguments = ["-C", directory] + args
-                process.standardOutput = Pipe()
-                process.standardError = Pipe()
+                let process = makeGitProcess(args, in: directory)
+                let stdout = Pipe()
+                process.standardOutput = stdout
+                process.standardError = FileHandle.nullDevice
 
                 do {
                     try process.run()
+                    // Drain before waiting: git blocks once the pipe buffer is full.
+                    let data = stdout.fileHandleForReading.readDataToEndOfFile()
                     process.waitUntilExit()
-                    let pipe = process.standardOutput as! Pipe
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
                     continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
                 } catch {
                     continuation.resume(returning: "")
