@@ -12,6 +12,7 @@ private struct ProjectEntry: Codable {
 }
 
 /// Manages the list of GhostCode projects. Persists to JSON.
+@MainActor
 final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published private(set) var selectedPath: String?
@@ -31,7 +32,16 @@ final class ProjectStore: ObservableObject {
 
     // MARK: - Mutations
 
+    /// Adds a project folder. `/a/b`, `/a/b/` and `/a/x/../b` are the same project.
+    /// Paths that exist but aren't directories are rejected; missing paths are
+    /// accepted (e.g. a project on an unmounted volume).
     func addProject(path: String) {
+        let path = URL(fileURLWithPath: path).standardizedFileURL.path
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue {
+            logger.error("Not adding \(path, privacy: .public): not a directory")
+            return
+        }
         guard !projects.contains(where: { $0.path == path }) else { return }
         projects.append(Project(path: path))
         saveToDisk()
@@ -39,6 +49,7 @@ final class ProjectStore: ObservableObject {
 
     func removeProject(path: String) {
         projects.removeAll { $0.path == path }
+        refreshTasks.removeValue(forKey: path)?.cancel()
         saveToDisk()
     }
 
@@ -120,10 +131,10 @@ final class ProjectStore: ObservableObject {
         refreshTasks[path]?.cancel()
         refreshTasks[path] = Task {
             let status = await GitStatusProvider.fetchStatus(for: path)
+            // A cancelled task has already been replaced or its project removed.
             guard !Task.isCancelled else { return }
-            await MainActor.run {
-                updateGitStatus(path: path, status: status)
-            }
+            updateGitStatus(path: path, status: status)
+            refreshTasks.removeValue(forKey: path)
         }
     }
 
@@ -204,8 +215,11 @@ final class ProjectStore: ObservableObject {
                 binary: project.binary
             )
         }
+        // Readable for hand edits. Comments in the file are not preserved.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         do {
-            let data = try JSONEncoder().encode(entries)
+            let data = try encoder.encode(entries)
             try data.write(to: URL(fileURLWithPath: filePath), options: .atomic)
         } catch {
             logger.error("Could not save \(self.filePath, privacy: .public): \(error)")

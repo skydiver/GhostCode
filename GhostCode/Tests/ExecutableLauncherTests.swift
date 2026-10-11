@@ -46,4 +46,20 @@ final class ExecutableLauncherTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(receivedPath, tempFile.path)
     }
+
+    func testLaunchWithMissingProjectFolderNamesTheFolder() {
+        let expectation = self.expectation(description: "failure handler invoked")
+        var receivedReason: String?
+
+        ExecutableLauncher.launch(
+            executablePath: "/usr/bin/true",
+            projectPath: "/nonexistent/project-\(UUID().uuidString)"
+        ) { _, reason in
+            receivedReason = reason
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(receivedReason?.contains("project folder"), true, receivedReason ?? "")
+    }
 }

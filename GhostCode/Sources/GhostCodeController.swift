@@ -51,6 +51,9 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
     // Projects whose first AI session is still resolving its binary
     private var pendingAISpawns: Set<String> = []
 
+    // Palette sends run in order, so "A, B" never becomes "A, B, Enter, Enter"
+    private let sendQueue = SerialTaskQueue()
+
     // The currently active terminal controller, resolved through the tab group
     var activeTerminalController: TerminalController? {
         guard let path = activeProjectPath else { return nil }
@@ -219,159 +222,48 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
             // dialogs and our own sheets alone.
             guard event.window === self.window, self.window?.attachedSheet == nil else { return event }
 
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let context = KeyShortcutRouter.Context(
+                hasActiveProject: self.activeProjectPath != nil,
+                tabCount: self.activeProjectPath.flatMap { self.projectTabs[$0]?.tabs.count } ?? 0
+            )
+            guard let shortcut = KeyShortcutRouter.route(
+                keyCode: event.keyCode,
+                characters: event.charactersIgnoringModifiers,
+                modifiers: event.modifierFlags,
+                context: context
+            ) else { return event }
 
-            // Cmd+Shift shortcuts
-            if flags == [.command, .shift] {
-                // Use keyCode for bracket keys since charactersIgnoringModifiers
-                // preserves Shift (Shift+[ = '{', not '[')
-                let keyCode = event.keyCode
+            self.perform(shortcut)
+            return nil
+        }
+    }
 
-                switch keyCode {
-                case 33: // [ key — previous tab (wraps around)
-                    if let projectPath = self.activeProjectPath,
-                       let tabGroup = self.projectTabs[projectPath],
-                       tabGroup.tabs.count > 1 {
-                        tabGroup.gotoTab(GHOSTTY_GOTO_TAB_PREVIOUS.rawValue)
-                        if let project = self.projectStore.project(forPath: projectPath) {
-                            self.showProjectTerminals(for: project)
-                        }
-                        return nil
-                    }
-                case 30: // ] key — next tab (wraps around)
-                    if let projectPath = self.activeProjectPath,
-                       let tabGroup = self.projectTabs[projectPath],
-                       tabGroup.tabs.count > 1 {
-                        tabGroup.gotoTab(GHOSTTY_GOTO_TAB_NEXT.rawValue)
-                        if let project = self.projectStore.project(forPath: projectPath) {
-                            self.showProjectTerminals(for: project)
-                        }
-                        return nil
-                    }
-                default:
-                    break
-                }
-
-                switch event.charactersIgnoringModifiers {
-                case "l", "L":
-                    self.toggleLeftSidebar(nil)
-                    return nil
-                case "r", "R":
-                    self.toggleRightSidebar(nil)
-                    return nil
-                case "d", "D":
-                    // Disable Cmd+Shift+D (new_split:down)
-                    if self.activeProjectPath != nil { return nil }
-                case "w", "W":
-                    // Disable Cmd+Shift+W (close_window — not applicable)
-                    if self.activeProjectPath != nil { return nil }
-                case "p", "P":
-                    // Disable Cmd+Shift+P (Ghostty command palette — not applicable)
-                    if self.activeProjectPath != nil { return nil }
-                default:
-                    break
-                }
+    private func perform(_ shortcut: KeyShortcut) {
+        switch shortcut {
+        case .toggleLeftSidebar:
+            toggleLeftSidebar(nil)
+        case .toggleRightSidebar:
+            toggleRightSidebar(nil)
+        case .previousTab, .nextTab:
+            guard let projectPath = activeProjectPath, let tabGroup = projectTabs[projectPath] else { return }
+            let direction = shortcut == .previousTab ? GHOSTTY_GOTO_TAB_PREVIOUS : GHOSTTY_GOTO_TAB_NEXT
+            tabGroup.gotoTab(direction.rawValue)
+            if let project = projectStore.project(forPath: projectPath) {
+                showProjectTerminals(for: project)
             }
-
-            // Disable Cmd+Alt+I (Ghostty inspector — not applicable)
-            if flags == [.command, .option],
-               event.charactersIgnoringModifiers?.lowercased() == "i",
-               self.activeProjectPath != nil {
-                return nil
-            }
-
-            // Cmd-only shortcuts
-            if flags == [.command], let char = event.charactersIgnoringModifiers {
-                // Cmd+Number (tab switching)
-                if let digit = char.first?.wholeNumberValue,
-                   digit >= 1, digit <= 9,
-                   let projectPath = self.activeProjectPath,
-                   let tabGroup = self.projectTabs[projectPath],
-                   !tabGroup.isEmpty {
-                    let targetIndex = digit == 9
-                        ? tabGroup.tabs.count - 1
-                        : min(digit - 1, tabGroup.tabs.count - 1)
-                    self.selectTab(at: targetIndex, projectPath: projectPath)
-                    return nil
-                }
-
-                // Cmd+W (close tab)
-                if char == "w",
-                   let projectPath = self.activeProjectPath,
-                   let tabGroup = self.projectTabs[projectPath],
-                   !tabGroup.isEmpty {
-                    self.closeTab(at: tabGroup.activeTabIndex, projectPath: projectPath)
-                    return nil
-                }
-
-                // Cmd+T (new shell tab)
-                if char == "t", let projectPath = self.activeProjectPath {
-                    self.createShellTab(projectPath: projectPath)
-                    return nil
-                }
-
-                // Disable Cmd+N (new_window — not applicable)
-                if char == "n", self.activeProjectPath != nil {
-                    return nil
-                }
-
-                // Disable Cmd+D (new_split:right)
-                if char == "d", self.activeProjectPath != nil {
-                    return nil
-                }
-
-                // Disable Cmd+[ and Cmd+] (goto_split)
-                if (char == "[" || char == "]"), self.activeProjectPath != nil {
-                    return nil
-                }
-            }
-
-            // Cmd+Enter (fullscreen the GhostCode window, not the terminal)
-            if flags == [.command], event.keyCode == 36, self.activeProjectPath != nil {
-                self.window?.toggleFullScreen(nil)
-                return nil
-            }
-
-            // Disable Cmd+Shift+Alt+W (close_all_windows — not applicable)
-            if flags == [.command, .shift, .option],
-               event.charactersIgnoringModifiers?.lowercased() == "w",
-               self.activeProjectPath != nil {
-                return nil
-            }
-
-            // Disable Cmd+Alt split shortcuts (goto_split directional)
-            if flags == [.command, .option], self.activeProjectPath != nil {
-                let keyCode = event.keyCode
-                // Arrow keys: up=126, down=125, left=123, right=124
-                if keyCode == 126 || keyCode == 125 || keyCode == 123 || keyCode == 124 {
-                    return nil
-                }
-            }
-
-            // Cmd+Ctrl+F (fullscreen the GhostCode window — alternate)
-            if flags == [.command, .control],
-               event.charactersIgnoringModifiers == "f",
-               self.activeProjectPath != nil {
-                self.window?.toggleFullScreen(nil)
-                return nil
-            }
-
-            // Disable Cmd+Ctrl split shortcuts (resize_split)
-            if flags == [.command, .control], self.activeProjectPath != nil {
-                let keyCode = event.keyCode
-                if keyCode == 126 || keyCode == 125 || keyCode == 123 || keyCode == 124 {
-                    return nil
-                }
-            }
-
-            // Disable Cmd+Ctrl+= (equalize_splits)
-            if flags == [.command, .control],
-               event.charactersIgnoringModifiers == "=",
-               self.activeProjectPath != nil {
-                return nil
-            }
-
-            return event
+        case .selectTab(let index):
+            guard let projectPath = activeProjectPath else { return }
+            selectTab(at: index, projectPath: projectPath)
+        case .closeActiveTab:
+            guard let projectPath = activeProjectPath, let tabGroup = projectTabs[projectPath] else { return }
+            closeTab(at: tabGroup.activeTabIndex, projectPath: projectPath)
+        case .newShellTab:
+            guard let projectPath = activeProjectPath else { return }
+            createShellTab(projectPath: projectPath)
+        case .toggleFullScreen:
+            window?.toggleFullScreen(nil)
+        case .swallow:
+            break
         }
     }
 
@@ -799,15 +691,34 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
 
     // MARK: - Tab Exit Observation
 
+    /// Removes the tab when its process exits. Ghostty asks to close the surface
+    /// as soon as the child exits; a slow poll covers exits that don't (e.g. when
+    /// Ghostty keeps the surface open to show an exit message).
     private func observeTabExit(_ tab: TabItem, projectPath: String) {
         let tabId = tab.id
         let controller = tab.controller
-        let cancellable = Timer.publish(every: 1.0, on: .main, in: .default)
+
+        let closeRequested: AnyPublisher<Void, Never>
+        if case .leaf(let surface) = controller.surfaceTree.root {
+            closeRequested = NotificationCenter.default
+                .publisher(for: Ghostty.Notification.ghosttyCloseSurface, object: surface)
+                .filter { ($0.userInfo?["process_alive"] as? Bool) == false }
+                .map { _ in () }
+                .eraseToAnyPublisher()
+        } else {
+            closeRequested = Empty().eraseToAnyPublisher()
+        }
+
+        let polledExit = Timer.publish(every: 5.0, on: .main, in: .default)
             .autoconnect()
-            .first(where: { [weak self] _ in
-                self?.isProcessExited(controller) ?? true
-            })
-            .sink { [weak self] _ in
+            .filter { [weak self] _ in self?.isProcessExited(controller) ?? true }
+            .map { _ in () }
+
+        let cancellable = closeRequested
+            .merge(with: polledExit)
+            .first()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
                 self?.handleTabExit(tabId: tabId, projectPath: projectPath)
             }
         exitCancellables[tabId] = cancellable
@@ -948,23 +859,24 @@ final class GhostCodeController: NSWindowController, NSWindowDelegate {
         } else {
             payload = "text:\(escaped)"
         }
-        _ = surfaceModel.perform(action: payload)
+        sendQueue.enqueue {
+            _ = surfaceModel.perform(action: payload)
+        }
     }
 
     /// Paste text via bracketed paste, then send a key event for Enter.
     /// Used for apps that need proper key encoding (e.g. Kitty protocol).
     private func sendPastedTextWithKeyEvent(_ text: String) {
-        guard let surfaceView = activeTerminalController?.focusedSurface,
-              let surface = surfaceView.surface,
-              let surfaceModel = surfaceView.surfaceModel else { return }
+        guard let surfaceModel = activeTerminalController?.focusedSurface?.surfaceModel,
+              !text.isEmpty else { return }
 
-        let len = text.utf8CString.count
-        guard len > 0 else { return }
-        text.withCString { ptr in
-            ghostty_surface_text(surface, ptr, UInt(len - 1))
-        }
-
-        Task { @MainActor in
+        sendQueue.enqueue {
+            // The job may run after the tab closed; holding surfaceModel keeps
+            // its C surface alive (it is freed in Ghostty.Surface.deinit).
+            text.withCString { ptr in
+                ghostty_surface_text(surfaceModel.unsafeCValue, ptr, UInt(text.utf8.count))
+            }
+            // The next send waits for this Enter, so it can't land before it.
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             surfaceModel.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .press))
             surfaceModel.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .release))

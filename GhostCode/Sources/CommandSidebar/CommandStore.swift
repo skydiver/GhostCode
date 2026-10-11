@@ -12,8 +12,7 @@ enum IconPosition: String, Codable {
 }
 
 /// A single command button in the palette.
-struct CommandItem: Codable, Identifiable {
-    var id: String { "\(label)|\(text ?? "")|\(executable ?? "")|\(arguments?.joined(separator: " ") ?? "")" }
+struct CommandItem: Codable {
     let label: String
     let text: String?
     let executable: String?
@@ -117,8 +116,8 @@ struct CommandItem: Codable, Identifiable {
             return iconPosition ?? .top
         case .flow, .list:
             switch iconPosition {
-            case .left, .right: return iconPosition!
-            case .top, .bottom, .none: return .left
+            case .right: return .right
+            case .left, .top, .bottom, .none: return .left
             }
         }
     }
@@ -132,8 +131,7 @@ enum SectionLayout: String, Codable {
 }
 
 /// A named section of command buttons.
-struct CommandSection: Codable, Identifiable {
-    var id: String { name }
+struct CommandSection: Codable {
     let name: String
     let layout: SectionLayout?
     let items: [CommandItem]
@@ -155,7 +153,6 @@ final class CommandStore: ObservableObject {
 
     private let filePath: String
     private var fileWatcher: DispatchSourceFileSystemObject?
-    private var watchedFD: Int32 = -1
 
     init(filePath: String? = nil) {
         self.filePath = filePath ?? GhostCodeConfig.commandsFilePath
@@ -175,35 +172,50 @@ final class CommandStore: ObservableObject {
 
     // MARK: - File Watching
 
+    /// Watches the file itself, or its directory while the file is missing.
+    /// After a delete or rename (atomic saves, editors that rewrite in place)
+    /// the file can be absent for a moment or for good; watching the directory
+    /// picks it up whenever it comes back, so live reload never stops.
     private func startWatching() {
         stopWatching()
 
-        let fd = open(filePath, O_EVTONLY)
-        guard fd >= 0 else { return }
-        watchedFD = fd
+        let fileFD = open(filePath, O_EVTONLY)
+        if fileFD >= 0 {
+            watch(fileFD, events: [.write, .delete, .rename]) { [weak self] flags in
+                guard let self else { return }
+                self.loadFromDisk()
+                if flags.contains(.delete) || flags.contains(.rename) {
+                    self.startWatching()
+                }
+            }
+            return
+        }
 
+        let directory = (filePath as NSString).deletingLastPathComponent
+        let directoryFD = open(directory, O_EVTONLY)
+        guard directoryFD >= 0 else {
+            logger.error("Cannot watch \(directory, privacy: .public) for \(self.filePath, privacy: .public)")
+            return
+        }
+        watch(directoryFD, events: [.write]) { [weak self] _ in
+            guard let self, FileManager.default.fileExists(atPath: self.filePath) else { return }
+            self.loadFromDisk()
+            self.startWatching()
+        }
+    }
+
+    private func watch(
+        _ fd: Int32,
+        events: DispatchSource.FileSystemEvent,
+        handler: @escaping (DispatchSource.FileSystemEvent) -> Void
+    ) {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename],
+            eventMask: events,
             queue: .main
         )
-
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            let flags = source.data
-            self.loadFromDisk()
-
-            // Atomic saves delete/rename the original file.
-            // Re-establish the watch on the new file.
-            if flags.contains(.delete) || flags.contains(.rename) {
-                self.startWatching()
-            }
-        }
-
-        source.setCancelHandler {
-            close(fd)
-        }
-
+        source.setEventHandler { handler(source.data) }
+        source.setCancelHandler { close(fd) }
         source.resume()
         fileWatcher = source
     }
@@ -211,7 +223,6 @@ final class CommandStore: ObservableObject {
     private func stopWatching() {
         fileWatcher?.cancel()
         fileWatcher = nil
-        watchedFD = -1
     }
 
     // MARK: - Persistence
@@ -266,11 +277,15 @@ final class CommandStore: ObservableObject {
     }
 
     /// Creates the commands file with commented defaults if it doesn't exist.
+    /// The watcher (directory mode while the file is missing) picks up the new file.
     private func ensureFileExists() {
         guard !FileManager.default.fileExists(atPath: filePath) else { return }
-        try? Self.defaultJSONC.data(using: .utf8)?
-            .write(to: URL(fileURLWithPath: filePath))
-        startWatching()
+        do {
+            try Data(Self.defaultJSONC.utf8)
+                .write(to: URL(fileURLWithPath: filePath), options: .withoutOverwriting)
+        } catch {
+            logger.error("Could not create \(self.filePath, privacy: .public): \(error)")
+        }
     }
 
     // MARK: - Default JSONC Template

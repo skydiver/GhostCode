@@ -96,6 +96,8 @@ make test-core TEST_FILTER=execCommand  # only Zig tests whose name matches
 
 GhostCode reads its settings from `~/.config/ghostcode/` (`config`, `projects.jsonc`, `commands.jsonc`). `make config` opens the `config` file.
 
+GhostCode rewrites `projects.jsonc` whenever the project list changes, so comments in that file are lost. If the file can't be read at launch, GhostCode shows a warning and leaves it untouched until you fix it and restart.
+
 It also loads your Ghostty configuration (`~/.config/ghostty/config`) underneath its own, so Ghostty settings such as fonts, themes, or `macos-icon` apply to GhostCode too. Keep that in mind when something looks different from a clean setup.
 
 ## Logs
@@ -143,8 +145,8 @@ Installed copies check `https://github.com/skydiver/GhostCode/releases/latest/do
 - **Testing an update feed:** run a release copy with `GHOSTCODE_UPDATE_ENDPOINT=https://…/appcast.xml` to point it at a test appcast. The override must be https, and it only applies to release builds; local builds never start the updater. Test feeds must be signed with the same key (`printf '%s' "$KEY" | sign_update --ed-key-file - appcast.xml`), because the app requires signed feeds.
 - **Release notes:** the workflow fails early if `GhostCode/release-notes/<version>.md` is missing. To change notes after publishing, edit the GitHub release body (the update dialog keeps the notes from the signed appcast). A re-run of the workflow resets the body to the notes file committed in the `v<version>` tag, so notes committed after tagging are ignored.
 - **Pulling a bad release:** mark the previous release as Latest on GitHub; new checks stop offering the bad one.
-- **Script tests:** `GhostCode/scripts/tests/test-make-appcast.sh` and `test-verify-ed-signature.sh`.
-- **If publishing fails after the release was created** (for example the appcast upload): run the workflow again with the same version and **Create tag** unchecked. It rebuilds and re-signs, then replaces the zip and `appcast.xml` on the existing release. Until then installed copies simply see no update.
+- **Script tests:** `GhostCode/scripts/tests/test-make-appcast.sh`, `test-verify-ed-signature.sh` and `test-release-build-number.sh`.
+- **If publishing fails after the release was created** (for example the appcast upload): run the workflow again with the same version and **Create tag** unchecked. It rebuilds and re-signs, then replaces the zip and `appcast.xml` on the existing release. Until then installed copies simply see no update. A re-run keeps the build number of the published appcast, so it is never offered again to users who already installed that version; to ship a fix to them, release a new version.
 - **Release approval:** the workflow runs in the `release` GitHub Environment, which holds the Sparkle signing key and only runs from `GhostCode` or `v*` tags after you approve it (Actions → the run → Review deployments). The Apple signing and notarization secrets are still repository secrets.
 - **Version rule:** the workflow accepts only `x.y.z`, and refuses a version lower than the current Latest release (an older version would otherwise be offered as an update, because Sparkle compares build numbers). Re-running the same version is allowed.
 - **Losing the signing key:** updates are verified before they're unpacked (`SUVerifyUpdateBeforeExtraction`), so if the EdDSA private key is ever lost, a new key can't be rolled out through an update: users would have to reinstall by hand. Keep the password-manager copy safe.

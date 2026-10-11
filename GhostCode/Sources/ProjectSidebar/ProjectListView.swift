@@ -230,8 +230,8 @@ struct ProjectListView: View {
 
     /// Determine the target index for a project dragged to Y position.
     private func indexAt(y: CGFloat) -> Int {
-        let orderedMidpoints = editingProjects.compactMap { project in
-            rowMidpoints[project.path].map { (index: editingProjects.firstIndex(of: project)!, midY: $0) }
+        let orderedMidpoints = editingProjects.enumerated().compactMap { index, project in
+            rowMidpoints[project.path].map { (index: index, midY: $0) }
         }.sorted { $0.midY < $1.midY }
 
         var targetIdx = 0

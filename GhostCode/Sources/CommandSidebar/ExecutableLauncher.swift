@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.flydev.ghostcode", category: "launcher")
 
 /// Spawns external executables on behalf of tile clicks.
 ///
@@ -39,6 +42,12 @@ enum ExecutableLauncher {
             return
         }
 
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: projectPath, isDirectory: &isDirectory), isDirectory.boolValue else {
+            onFailure(executablePath, "The project folder \(projectPath) no longer exists.")
+            return
+        }
+
         let resolvedArgs: [String]
         if let template = arguments {
             resolvedArgs = template.map { $0.replacingOccurrences(of: pathPlaceholder, with: projectPath) }
@@ -51,6 +60,14 @@ enum ExecutableLauncher {
             process.executableURL = url
             process.arguments = resolvedArgs
             process.currentDirectoryURL = URL(fileURLWithPath: projectPath)
+            // Don't share the app's stdio with launched apps.
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            process.terminationHandler = { process in
+                guard process.terminationStatus != 0 else { return }
+                logger.warning("\(executablePath, privacy: .public) exited with status \(process.terminationStatus)")
+            }
 
             do {
                 try process.run()

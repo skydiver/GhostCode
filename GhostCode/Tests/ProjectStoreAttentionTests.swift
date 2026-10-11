@@ -1,6 +1,7 @@
 import XCTest
 @testable import Ghostty
 
+@MainActor
 final class ProjectStoreAttentionTests: XCTestCase {
 
     private func makeStore(with projects: [Project]) -> ProjectStore {

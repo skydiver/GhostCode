@@ -203,11 +203,10 @@ private struct ProjectInfoSection: View {
     }
 
     private var displayPath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if project.path.hasPrefix(home) {
-            return "~" + project.path.dropFirst(home.count)
-        }
-        return project.path
+        ProjectPathFormatter.abbreviatingHome(
+            project.path,
+            home: FileManager.default.homeDirectoryForCurrentUser.path
+        )
     }
 
     private var gitText: String {
@@ -239,7 +238,48 @@ private struct InfoRow: View {
 
 // MARK: - Session Info Provider
 
+enum ProjectPathFormatter {
+    /// Replaces a leading home directory with `~`. Siblings such as
+    /// `/Users/martinez` for home `/Users/martin` are left alone.
+    static func abbreviatingHome(_ path: String, home: String) -> String {
+        if path == home { return "~" }
+        guard path.hasPrefix(home + "/") else { return path }
+        return "~" + path.dropFirst(home.count)
+    }
+}
+
 enum SessionInfoProvider {
+    /// Claude Code caps directory names at this length and appends a hash beyond it.
+    private static let maxDirectoryNameLength = 200
+
+    /// The directory name Claude Code uses under `~/.claude/projects` for a project:
+    /// every UTF-16 unit that isn't an ASCII letter or digit becomes `-`.
+    /// (Matches Claude Code 2.1.x; names over 200 characters also get a hash suffix.)
+    static func directoryName(for projectPath: String) -> String {
+        let units = projectPath.utf16.map { unit -> Character in
+            guard let scalar = Unicode.Scalar(unit), scalar.isASCII,
+                  scalar.properties.isAlphabetic || ("0"..."9").contains(scalar)
+            else { return "-" }
+            return Character(scalar)
+        }
+        return String(units)
+    }
+
+    /// Finds the project's sessions directory in `root`. Long names end in a hash
+    /// GhostCode can't reproduce, so those are matched by their truncated prefix.
+    static func sessionsDirectory(for projectPath: String, in root: String) -> String? {
+        let name = directoryName(for: projectPath)
+        let fm = FileManager.default
+        if name.count <= maxDirectoryNameLength {
+            let path = "\(root)/\(name)"
+            return fm.fileExists(atPath: path) ? path : nil
+        }
+        let prefix = String(name.prefix(maxDirectoryNameLength)) + "-"
+        guard let match = (try? fm.contentsOfDirectory(atPath: root))?.first(where: { $0.hasPrefix(prefix) })
+        else { return nil }
+        return "\(root)/\(match)"
+    }
+
     struct SessionInfo {
         let count: Int
         let lastDate: Date?
@@ -259,12 +299,10 @@ enum SessionInfoProvider {
     static func info(for projectPath: String) async -> SessionInfo {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                let encoded = projectPath.replacingOccurrences(of: "/", with: "-")
                 let home = FileManager.default.homeDirectoryForCurrentUser.path
-                let sessionsDir = "\(home)/.claude/projects/\(encoded)"
-
                 let fm = FileManager.default
-                guard let contents = try? fm.contentsOfDirectory(atPath: sessionsDir) else {
+                guard let sessionsDir = sessionsDirectory(for: projectPath, in: "\(home)/.claude/projects"),
+                      let contents = try? fm.contentsOfDirectory(atPath: sessionsDir) else {
                     continuation.resume(returning: SessionInfo(count: 0, lastDate: nil))
                     return
                 }

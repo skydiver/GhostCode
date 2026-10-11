@@ -16,6 +16,7 @@ extension View {
 final class TooltipPanel {
     static let shared = TooltipPanel()
     private var panel: NSPanel?
+    private weak var anchor: NSView?
 
     func show(text: String, anchorView: NSView) {
         dismiss()
@@ -83,11 +84,21 @@ final class TooltipPanel {
         panel.contentView = effectView
         panel.orderFront(nil)
         self.panel = panel
+        self.anchor = anchorView
     }
+
+    var isShowing: Bool { panel != nil }
 
     func dismiss() {
         panel?.close()
         panel = nil
+        anchor = nil
+    }
+
+    /// Closes the tooltip only if `view` is the one it points at.
+    func dismiss(anchoredTo view: NSView) {
+        guard anchor === view else { return }
+        dismiss()
     }
 }
 
@@ -138,5 +149,14 @@ final class TooltipTrackingView: NSView {
     override func mouseExited(with event: NSEvent) {
         hoverTask?.cancel()
         TooltipPanel.shared.dismiss()
+    }
+
+    /// A view removed while hovered (e.g. a palette reload) gets no mouseExited,
+    /// so close its tooltip here instead of leaving it floating.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        guard newWindow == nil else { return }
+        hoverTask?.cancel()
+        TooltipPanel.shared.dismiss(anchoredTo: self)
     }
 }

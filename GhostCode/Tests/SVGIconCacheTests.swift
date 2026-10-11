@@ -1,6 +1,7 @@
 import XCTest
 @testable import Ghostty
 
+@MainActor
 final class SVGIconCacheTests: XCTestCase {
     private let sampleSVG =
         #"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#
@@ -51,5 +52,25 @@ final class SVGIconCacheTests: XCTestCase {
         XCTAssertNotNil(first)
         XCTAssertTrue(first === second,
                       "Repeated lookups for the same icon string should return the same NSImage")
+    }
+
+    func testRejectsDataURIOverSizeLimit() {
+        let padding = String(repeating: " ", count: SVGIconCache.maxEncodedLength)
+        let svg = sampleSVG.replacingOccurrences(of: "<rect", with: "<rect\(padding)")
+        let uri = "data:image/svg+xml;base64,\(Data(svg.utf8).base64EncodedString())"
+        XCTAssertNil(SVGIconCache().image(for: uri))
+    }
+
+    func testDoesNotRetryFailedDecodes() {
+        var decodeCount = 0
+        let cache = SVGIconCache { _ in
+            decodeCount += 1
+            return nil
+        }
+        let uri = "data:image/svg+xml;base64,\(Data("x".utf8).base64EncodedString())"
+
+        XCTAssertNil(cache.image(for: uri))
+        XCTAssertNil(cache.image(for: uri))
+        XCTAssertEqual(decodeCount, 1)
     }
 }

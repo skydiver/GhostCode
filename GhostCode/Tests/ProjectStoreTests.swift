@@ -1,6 +1,7 @@
 import XCTest
 @testable import Ghostty
 
+@MainActor
 final class ProjectStoreTests: XCTestCase {
     var store: ProjectStore!
     var tempFile: URL!
@@ -307,5 +308,46 @@ final class ProjectStoreTests: XCTestCase {
 
         XCTAssertTrue(store.projects[0].hasAttention)
         XCTAssertEqual(store.projects[0].name, "Renamed")
+    }
+
+    // MARK: - Path normalization
+
+    func testAddProjectTreatsTrailingSlashAsSamePath() {
+        store.addProject(path: "/tmp/project-a")
+        store.addProject(path: "/tmp/project-a/")
+        XCTAssertEqual(store.projects.map(\.path), ["/tmp/project-a"])
+    }
+
+    func testAddProjectStandardizesDotSegments() {
+        store.addProject(path: "/tmp/x/../project-a/./")
+        XCTAssertEqual(store.projects.map(\.path), ["/tmp/project-a"])
+    }
+
+    func testAddProjectRejectsRegularFile() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("not-a-dir-\(UUID().uuidString)")
+        try Data("x".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        store.addProject(path: file.path)
+
+        XCTAssertTrue(store.projects.isEmpty)
+    }
+
+    // MARK: - File format
+
+    func testSavesReadableJSON() throws {
+        store.addProject(path: "/tmp/project-a")
+        store.setBinary("/tmp/project-a", binary: .codex)
+
+        let contents = try String(contentsOf: tempFile, encoding: .utf8)
+
+        XCTAssertEqual(contents, """
+        [
+          {
+            "binary" : "codex",
+            "path" : "/tmp/project-a"
+          }
+        ]
+        """)
     }
 }

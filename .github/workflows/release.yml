@@ -112,11 +112,27 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz
           echo "$ZIG_SHA256  $RUNNER_TEMP/zig.tar.xz" | shasum -a 256 -c -
           tar xJf "$RUNNER_TEMP/zig.tar.xz"
-          echo "$PWD/zig-aarch64-macos-0.16.0" >> $GITHUB_PATH
+          echo "$PWD/zig-aarch64-macos-0.16.0" >> "$GITHUB_PATH"
 
       - name: Build XCFramework
         working-directory: Ghostty
         run: zig build -Demit-xcframework -Demit-macos-app=false -Doptimize=ReleaseFast
+
+      # A re-run of a published version keeps its build number, so Sparkle
+      # doesn't offer that same version again to users who already have it.
+      - name: Choose build number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PREVIOUS="$RUNNER_TEMP/previous-appcast.xml"
+          # Only a release whose appcast was published can have reached users.
+          if gh release view "v${VERSION}" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx appcast.xml; then
+            gh release download "v${VERSION}" --pattern appcast.xml --output "$PREVIOUS"
+          fi
+          BUILD_NUMBER=$(GhostCode/scripts/release-build-number.sh "$GITHUB_RUN_NUMBER" "$PREVIOUS")
+          echo "Build number: $BUILD_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       # ── Keychain & Signing ─────────────────────────────────
       - name: Import signing certificate
@@ -125,6 +141,7 @@ jobs:
           P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
+          set -euo pipefail
           CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
 
@@ -152,35 +169,39 @@ jobs:
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
+          set -euo pipefail
           mkdir -p ~/private_keys
-          echo -n "$API_KEY_P8" | base64 --decode -o ~/private_keys/AuthKey_${API_KEY_ID}.p8
+          echo -n "$API_KEY_P8" | base64 --decode -o ~/private_keys/"AuthKey_${API_KEY_ID}.p8"
 
       # ── Build ──────────────────────────────────────────────
       - name: Archive
         run: |
+          set -euo pipefail
           xcodebuild archive \
             -project Ghostty/macos/Ghostty.xcodeproj \
             -scheme Ghostty \
             -configuration Release \
-            -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
+            -archivePath "$RUNNER_TEMP/GhostCode.xcarchive" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
             GHOSTCODE_UPDATES_ENABLED=YES \
             MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             CODE_SIGN_STYLE=Manual \
             "CODE_SIGN_IDENTITY=Developer ID Application" \
             DEVELOPMENT_TEAM=F548563X8C
 
       - name: Export
         run: |
+          set -euo pipefail
           xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/GhostCode.xcarchive \
-            -exportPath $RUNNER_TEMP/export \
+            -archivePath "$RUNNER_TEMP/GhostCode.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist GhostCode/ExportOptions.plist
 
       # ── Notarize ───────────────────────────────────────────
       - name: Create ZIP for notarization
         run: |
+          set -euo pipefail
           ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent \
             "$RUNNER_TEMP/export/GhostCode.app" \
             "$RUNNER_TEMP/GhostCode-notarize.zip"
@@ -190,8 +211,9 @@ jobs:
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
+          set -euo pipefail
           xcrun notarytool submit "$RUNNER_TEMP/GhostCode-notarize.zip" \
-            --key ~/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            --key ~/private_keys/"AuthKey_${API_KEY_ID}.p8" \
             --key-id "$API_KEY_ID" \
             --issuer "$API_ISSUER_ID" \
             --wait
@@ -202,6 +224,7 @@ jobs:
       # ── Package & Release ──────────────────────────────────
       - name: Create release ZIP
         run: |
+          set -euo pipefail
           ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent \
             "$RUNNER_TEMP/export/GhostCode.app" \
             "$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
@@ -264,4 +287,4 @@ jobs:
         if: always()
         run: |
           rm -rf ~/private_keys
-          security delete-keychain $RUNNER_TEMP/build.keychain-db
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db"

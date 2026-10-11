@@ -108,12 +108,14 @@ enum GhostCodeConfig {
     /// - Parameter path: Override path for testing. Uses `appConfigFilePath` when nil.
     static func loadAppConfig(from path: String? = nil) -> AppConfig {
         let filePath = path ?? appConfigFilePath
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-              let config = try? JSONDecoder().decode(AppConfig.self, from: data)
-        else {
+        guard FileManager.default.fileExists(atPath: filePath) else { return .default }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            return try JSONDecoder().decode(AppConfig.self, from: data)
+        } catch {
+            logger.error("Could not read \(filePath, privacy: .public), using defaults: \(error)")
             return .default
         }
-        return config
     }
 
     /// Ensures the config directory exists. Call once at app startup.

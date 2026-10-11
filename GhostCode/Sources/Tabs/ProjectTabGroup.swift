@@ -57,19 +57,10 @@ final class ProjectTabGroup: ObservableObject {
         }
     }
 
+    /// Moves a tab by `offset` positions, clamped to the ends of the bar.
     func moveTab(from sourceIndex: Int, by offset: Int) {
         let targetIndex = min(max(sourceIndex + offset, 0), tabs.count - 1)
-        guard sourceIndex != targetIndex,
-              sourceIndex >= 0, sourceIndex < tabs.count else { return }
-        let tab = tabs.remove(at: sourceIndex)
-        tabs.insert(tab, at: targetIndex)
-        if activeTabIndex == sourceIndex {
-            activeTabIndex = targetIndex
-        } else if sourceIndex < activeTabIndex, targetIndex >= activeTabIndex {
-            activeTabIndex -= 1
-        } else if sourceIndex > activeTabIndex, targetIndex <= activeTabIndex {
-            activeTabIndex += 1
-        }
+        moveTab(fromIndex: sourceIndex, toIndex: targetIndex)
     }
 
     /// Navigate tabs using Ghostty's goto_tab semantics.

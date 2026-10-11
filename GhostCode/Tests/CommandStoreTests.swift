@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import Ghostty
 
 final class CommandStoreTests: XCTestCase {
@@ -443,5 +444,37 @@ final class CommandStoreTests: XCTestCase {
         try contents.data(using: .utf8)!.write(to: tempFile)
         addTeardownBlock { try? FileManager.default.removeItem(at: tempFile) }
         return tempFile
+    }
+
+    // MARK: - File watching
+
+    func testReloadsWhenFileIsDeletedAndRecreatedLater() throws {
+        let tempFile = try writeCommands(#"{ "sections": [{ "name": "Old", "items": [] }] }"#)
+        let store = CommandStore(filePath: tempFile.path)
+
+        try FileManager.default.removeItem(at: tempFile)
+        // Let the delete event arrive before the file comes back.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        let reloaded = expectation(description: "sections reloaded")
+        let cancellable = store.$sections.dropFirst().sink { sections in
+            if sections.map(\.name) == ["New"] { reloaded.fulfill() }
+        }
+        try #"{ "sections": [{ "name": "New", "items": [] }] }"#.data(using: .utf8)!.write(to: tempFile)
+        wait(for: [reloaded], timeout: 3)
+        cancellable.cancel()
+    }
+
+    func testReloadsAfterAtomicSave() throws {
+        let tempFile = try writeCommands(#"{ "sections": [{ "name": "Old", "items": [] }] }"#)
+        let store = CommandStore(filePath: tempFile.path)
+
+        let reloaded = expectation(description: "sections reloaded")
+        let cancellable = store.$sections.dropFirst().sink { sections in
+            if sections.map(\.name) == ["New"] { reloaded.fulfill() }
+        }
+        try #"{ "sections": [{ "name": "New", "items": [] }] }"#.data(using: .utf8)!.write(to: tempFile, options: .atomic)
+        wait(for: [reloaded], timeout: 3)
+        cancellable.cancel()
     }
 }

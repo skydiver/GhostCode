@@ -13,7 +13,8 @@ struct GhostCodeCommandPaletteView: View {
                     if let loadError = store.loadError {
                         CommandConfigErrorView(message: loadError)
                     }
-                    ForEach(store.sections) { section in
+                    // Positional identity: section names and items may repeat in the config.
+                    ForEach(Array(store.sections.enumerated()), id: \.offset) { _, section in
                         CommandSectionView(
                             section: section,
                             state: state,
@@ -124,7 +125,7 @@ struct CommandSectionView: View {
                     switch section.resolvedLayout {
                     case .flow:
                         FlowLayout(spacing: 6) {
-                            ForEach(section.items) { item in
+                            ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                                 CommandButton(item: item) {
                                     if let action = item.action { onItemAction(action) }
                                 }
@@ -133,7 +134,7 @@ struct CommandSectionView: View {
                         }
                     case .list:
                         VStack(spacing: 6) {
-                            ForEach(section.items) { item in
+                            ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                                 CommandButton(item: item, fullWidth: true) {
                                     if let action = item.action { onItemAction(action) }
                                 }
@@ -146,7 +147,7 @@ struct CommandSectionView: View {
                             GridItem(.flexible(), spacing: 6)
                         ]
                         LazyVGrid(columns: columns, spacing: 6) {
-                            ForEach(section.items) { item in
+                            ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                                 CommandTile(item: item) {
                                     if let action = item.action { onItemAction(action) }
                                 }
