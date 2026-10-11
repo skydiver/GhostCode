@@ -2,27 +2,34 @@
 #
 # Write a one-item Sparkle appcast for a GhostCode release to stdout.
 #
-#   make-appcast.sh <version> <build> <min-os> <signed-attrs> <notes-file>
+#   make-appcast.sh <version> <build> <min-os> <signed-attrs> [notes-file]
 #
 # `signed-attrs` is sign_update's output, the literal
-# `sparkle:edSignature="…" length="…"` pair. `notes-file` is the release notes
-# in Markdown; they are embedded inline in the item (a signed feed can't use a
-# separate releaseNotesLink page, whose content the signature wouldn't cover).
+# `sparkle:edSignature="…" length="…"` pair. `notes-file`, when given, is the
+# release notes in Markdown, embedded inline in the item (a signed feed can't
+# use a separate releaseNotesLink page, whose content the signature wouldn't
+# cover). Without it the item has no notes.
 # One item is enough: Sparkle only needs the newest release, and the feed URL
 # always resolves to the latest one.
 set -euo pipefail
 
-VERSION=${1:?usage: make-appcast.sh <version> <build> <min-os> <signed-attrs> <notes-file>}
+VERSION=${1:?usage: make-appcast.sh <version> <build> <min-os> <signed-attrs> [notes-file]}
 BUILD=${2:?missing build}
 MIN_OS=${3:?missing minimum system version}
 SIGNED=${4:?missing signature attributes}
-NOTES_FILE=${5:?missing release notes file}
+NOTES_FILE=${5:-}
 
 [[ $SIGNED == *edSignature=* ]] || { echo "make-appcast: no signature in '$SIGNED'" >&2; exit 1; }
-[[ -s $NOTES_FILE ]] || { echo "make-appcast: release notes file '$NOTES_FILE' is missing or empty" >&2; exit 1; }
-NOTES=$(cat "$NOTES_FILE")
-# Keep the notes from closing the CDATA section early.
-NOTES=${NOTES//']]>'/']]]]><![CDATA[>'}
+
+DESCRIPTION=""
+if [[ -n $NOTES_FILE ]]; then
+    [[ -s $NOTES_FILE ]] || { echo "make-appcast: release notes file '$NOTES_FILE' is missing or empty" >&2; exit 1; }
+    NOTES=$(cat "$NOTES_FILE")
+    # Keep the notes from closing the CDATA section early.
+    NOTES=${NOTES//']]>'/']]]]><![CDATA[>'}
+    DESCRIPTION="
+      <description sparkle:format=\"markdown\"><![CDATA[$NOTES]]></description>"
+fi
 
 REPO=https://github.com/skydiver/GhostCode
 ZIP_URL="$REPO/releases/download/v$VERSION/GhostCode-$VERSION-universal.zip"
@@ -41,8 +48,7 @@ cat <<XML
       <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
       <sparkle:version>$(escape "$BUILD")</sparkle:version>
       <sparkle:shortVersionString>$(escape "$VERSION")</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>$(escape "$MIN_OS")</sparkle:minimumSystemVersion>
-      <description sparkle:format="markdown"><![CDATA[$NOTES]]></description>
+      <sparkle:minimumSystemVersion>$(escape "$MIN_OS")</sparkle:minimumSystemVersion>$DESCRIPTION
       <enclosure url="$(escape "$ZIP_URL")" type="application/octet-stream" $SIGNED />
     </item>
   </channel>

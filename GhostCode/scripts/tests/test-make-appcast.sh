@@ -29,9 +29,12 @@ expect ']]]]><![CDATA[>'
 if ./make-appcast.sh 0.15.1 42 13.0 'length="123"' "$NOTES" >/dev/null 2>&1; then
     echo "FAIL: accepted attributes without a signature" >&2; exit 1
 fi
-if ./make-appcast.sh 0.15.1 42 13.0 "$ATTRS" >/dev/null 2>&1; then
-    echo "FAIL: accepted a missing notes argument" >&2; exit 1
-fi
+# Without a notes file the item has no description (notes are added to the
+# GitHub release by hand after publishing).
+BARE=$(./make-appcast.sh 0.15.1 42 13.0 "$ATTRS")
+printf '%s' "$BARE" | xmllint --noout -
+[[ $BARE == *'<sparkle:version>42</sparkle:version>'* ]] || { echo "FAIL: no version without notes" >&2; exit 1; }
+[[ $BARE != *'sparkle:format="markdown"'* ]] || { echo "FAIL: notes present without a notes file" >&2; exit 1; }
 if ./make-appcast.sh 0.15.1 42 13.0 "$ATTRS" /nonexistent/notes.md >/dev/null 2>&1; then
     echo "FAIL: accepted a nonexistent notes file" >&2; exit 1
 fi

@@ -98,12 +98,6 @@ jobs:
           echo "v${VERSION} points to ${TAG_SHA}, which is neither the dispatched commit nor on GhostCode"
           exit 1
 
-      - name: Check release notes
-        run: |
-          set -euo pipefail
-          NOTES="GhostCode/release-notes/${VERSION}.md"
-          test -s "$NOTES" || { echo "Missing release notes: $NOTES (commit it before running the release)"; exit 1; }
-
       # ── Zig ────────────────────────────────────────────────
       - name: Install Zig
         run: |
@@ -255,7 +249,8 @@ jobs:
           BUILD=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$PLIST")
           MIN_OS=$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$PLIST")
           APPCAST="$RUNNER_TEMP/appcast.xml"
-          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" "GhostCode/release-notes/${VERSION}.md" > "$APPCAST"
+          # No notes in the feed: they are written on the GitHub release after publishing.
+          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" > "$APPCAST"
           xmllint --noout "$APPCAST"
 
           # Sign the feed itself (the app sets SURequireSignedFeed), then verify it.
@@ -271,12 +266,12 @@ jobs:
           ZIP="$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             # Re-run for an existing release: replace the zip, then the appcast.
+            # The body is left alone: it holds the notes written by hand.
             gh release upload "v${VERSION}" "$ZIP" --clobber
-            gh release edit "v${VERSION}" --notes-file "GhostCode/release-notes/${VERSION}.md"
           else
             gh release create "v${VERSION}" "$ZIP" \
               --title "GhostCode v${VERSION}" \
-              --notes-file "GhostCode/release-notes/${VERSION}.md" \
+              --generate-notes \
               --latest
           fi
           # The appcast goes last, so the feed never points at a missing zip.
