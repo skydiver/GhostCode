@@ -57,6 +57,29 @@ jobs:
           fi
           echo "Version $VERSION OK (latest release: ${LATEST:-none})"
 
+      # ── Release notes ──────────────────────────────────────
+      # The notes are written on a draft GitHub release before the run and are
+      # never committed. They are signed into the appcast, so the update dialog
+      # shows them. Read before tagging, so a missing draft stops the run early.
+      - name: Read release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RELEASE_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select(.tag_name == \"v${VERSION}\") | .id" | head -n 1)
+          if [[ -z "$RELEASE_ID" ]]; then
+            echo "No GitHub release for v${VERSION}. Create a draft release with the notes first (see 'Releases and Updates' in GhostCode/docs/development.md)."
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body > "$RUNNER_TEMP/release-notes.md"
+          if [[ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/release-notes.md")" ]]; then
+            echo "The v${VERSION} release has no notes."
+            exit 1
+          fi
+          IS_DRAFT=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .draft)
+          echo "RELEASE_IS_DRAFT=$IS_DRAFT" >> "$GITHUB_ENV"
+
       # ── Tag ────────────────────────────────────────────────
       - name: Create tag
         if: inputs.create_tag
@@ -249,8 +272,7 @@ jobs:
           BUILD=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$PLIST")
           MIN_OS=$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$PLIST")
           APPCAST="$RUNNER_TEMP/appcast.xml"
-          # No notes in the feed: they are written on the GitHub release after publishing.
-          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" > "$APPCAST"
+          GhostCode/scripts/make-appcast.sh "$VERSION" "$BUILD" "$MIN_OS" "$ATTRS" "$RUNNER_TEMP/release-notes.md" > "$APPCAST"
           xmllint --noout "$APPCAST"
 
           # Sign the feed itself (the app sets SURequireSignedFeed), then verify it.
@@ -264,18 +286,18 @@ jobs:
         run: |
           set -euo pipefail
           ZIP="$RUNNER_TEMP/GhostCode-${VERSION}-universal.zip"
-          if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            # Re-run for an existing release: replace the zip, then the appcast.
-            # The body is left alone: it holds the notes written by hand.
-            gh release upload "v${VERSION}" "$ZIP" --clobber
+          APPCAST="$RUNNER_TEMP/appcast.xml"
+          if [[ "$RELEASE_IS_DRAFT" == "true" ]]; then
+            # Attach both files, then publish. The feed URL (releases/latest) only
+            # sees the release once published, so it never points at a missing zip.
+            gh release upload "v${VERSION}" "$ZIP" "$APPCAST" --clobber
+            gh release edit "v${VERSION}" --draft=false --latest --title "GhostCode v${VERSION}"
           else
-            gh release create "v${VERSION}" "$ZIP" \
-              --title "GhostCode v${VERSION}" \
-              --generate-notes \
-              --latest
+            # Re-run for a published release: replace the zip, then the appcast.
+            # The body is left alone.
+            gh release upload "v${VERSION}" "$ZIP" --clobber
+            gh release upload "v${VERSION}" "$APPCAST" --clobber
           fi
-          # The appcast goes last, so the feed never points at a missing zip.
-          gh release upload "v${VERSION}" "$RUNNER_TEMP/appcast.xml" --clobber
 
       # ── Cleanup ────────────────────────────────────────────
       - name: Cleanup
